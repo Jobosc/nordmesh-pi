@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NordVPN Meshnet Manager</title>
+    <style>
+        :root {
+            --nord-blue: #4687ff;
+            --nord-dark: #1a1a2e;
+            --nord-darker: #12121f;
+            --nord-card: #1e1e35;
+            --nord-border: #2a2a4a;
+            --nord-text: #e0e0e8;
+            --nord-muted: #8888a8;
+            --nord-green: #4caf50;
+            --nord-red: #ef5350;
+            --nord-orange: #ffa726;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--nord-darker);
+            color: var(--nord-text);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--nord-dark);
+            border-bottom: 1px solid var(--nord-border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo svg { width: 36px; height: 36px; }
+
+        .logo h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .logo span {
+            color: var(--nord-blue);
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--nord-muted);
+        }
+
+        .status-dot.green { background: var(--nord-green); }
+        .status-dot.red { background: var(--nord-red); }
+        .status-dot.orange { background: var(--nord-orange); }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        /* Setup flow */
+        .setup-card {
+            background: var(--nord-card);
+            border: 1px solid var(--nord-border);
+            border-radius: 12px;
+            padding: 2.5rem;
+            text-align: center;
+            max-width: 500px;
+            margin: 3rem auto;
+        }
+
+        .setup-card h2 {
+            margin-bottom: 1rem;
+            font-size: 1.4rem;
+        }
+
+        .setup-card p {
+            color: var(--nord-muted);
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary { background: var(--nord-blue); }
+        .btn-primary:hover:not(:disabled) { background: #3570e0; }
+        .btn-danger { background: var(--nord-red); }
+        .btn-danger:hover:not(:disabled) { background: #d32f2f; }
+        .btn-success { background: var(--nord-green); }
+        .btn-success:hover:not(:disabled) { background: #388e3c; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--nord-border);
+            color: var(--nord-text);
+        }
+        .btn-outline:hover:not(:disabled) { border-color: var(--nord-blue); color: var(--nord-blue); }
+        .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--nord-border);
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            color: var(--nord-muted);
+            font-size: 0.95rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { color: var(--nord-text); }
+        .tab.active {
+            color: var(--nord-blue);
+            border-bottom-color: var(--nord-blue);
+        }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Cards */
+        .card {
+            background: var(--nord-card);
+            border: 1px solid var(--nord-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .card-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* Peer list */
+        .peer {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 1rem;
+            border: 1px solid var(--nord-border);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            background: rgba(255,255,255,0.02);
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .peer-info h4 {
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+            word-break: break-all;
+        }
+
+        .peer-meta {
+            font-size: 0.8rem;
+            color: var(--nord-muted);
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .peer-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        /* Permission toggles */
+        .permissions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .perm-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            border: 1px solid var(--nord-border);
+            background: rgba(255,255,255,0.03);
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .perm-toggle.active {
+            border-color: var(--nord-green);
+            background: rgba(76, 175, 80, 0.15);
+            color: var(--nord-green);
+        }
+
+        .perm-toggle:hover {
+            border-color: var(--nord-blue);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--nord-muted);
+        }
+
+        input[type="text"],
+        input[type="email"] {
+            width: 100%;
+            padding: 0.6rem 0.9rem;
+            background: var(--nord-darker);
+            border: 1px solid var(--nord-border);
+            border-radius: 8px;
+            color: var(--nord-text);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--nord-blue);
+        }
+
+        /* Invitation items */
+        .inv-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0.9rem;
+            border: 1px solid var(--nord-border);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 3s forwards;
+            max-width: 400px;
+        }
+
+        .toast.success { background: var(--nord-green); color: white; }
+        .toast.error { background: var(--nord-red); color: white; }
+        .toast.info { background: var(--nord-blue); color: white; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-overlay.visible {
+            display: flex;
+        }
+
+        .loading-box {
+            background: var(--nord-card);
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .loading-box .spinner {
+            width: 32px;
+            height: 32px;
+            border-width: 3px;
+            margin-bottom: 1rem;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 2rem;
+            color: var(--nord-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Invite form inline */
+        .invite-form {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .invite-form .form-group {
+            flex: 1;
+            min-width: 200px;
+            margin-bottom: 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            header { padding: 0.75rem 1rem; }
+            .container { padding: 1rem; }
+            .setup-card { padding: 1.5rem; margin: 1.5rem auto; }
+            .peer { flex-direction: column; }
+            .peer-actions { align-items: flex-start; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <svg viewBox="0 0 36 36" fill="none">
+                <rect width="36" height="36" rx="8" fill="#4687ff"/>
+                <path d="M18 8L10 14v8l8 6 8-6v-8l-8-6zm0 3l5 3.75v5.5L18 24l-5-3.75v-5.5L18 11z" fill="white"/>
+                <circle cx="18" cy="18" r="3" fill="white"/>
+            </svg>
+            <h1>Meshnet <span>Manager</span></h1>
+        </div>
+        <div class="status-bar" id="statusBar">
+            <div class="status-item">
+                <div class="status-dot" id="dotInstalled"></div>
+                <span id="lblInstalled">Checking...</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="dotLoggedIn"></div>
+                <span id="lblLoggedIn">--</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="dotMeshnet"></div>
+                <span id="lblMeshnet">--</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Not Installed -->
+        <div id="viewInstall" class="setup-card" style="display:none;">
+            <h2>NordVPN Not Installed</h2>
+            <p>NordVPN needs to be installed on this device before you can use Meshnet. Click below to install it automatically.</p>
+            <button class="btn btn-primary" onclick="installNordVPN()" id="btnInstall">
+                Install NordVPN
+            </button>
+        </div>
+
+        <!-- Login -->
+        <div id="viewLogin" class="setup-card" style="display:none;">
+            <h2>Login Required</h2>
+            <p>Log in to your NordVPN account to manage Meshnet.</p>
+            <div class="form-group">
+                <label for="loginToken">Access Token (from NordVPN dashboard)</label>
+                <input type="text" id="loginToken" placeholder="Paste your access token here...">
+            </div>
+            <button class="btn btn-primary" onclick="loginWithToken()" id="btnLogin" style="margin-bottom:0.75rem;">
+                Login with Token
+            </button>
+            <br>
+            <button class="btn btn-outline" onclick="loginBrowser()">
+                Login via Browser Link
+            </button>
+            <div id="loginUrl" style="margin-top:1rem; display:none; word-break:break-all;">
+                <p style="color:var(--nord-muted); font-size:0.85rem;">Open this URL in a browser to complete login:</p>
+                <a href="#" id="loginUrlLink" target="_blank" style="color:var(--nord-blue); font-size:0.85rem;"></a>
+            </div>
+        </div>
+
+        <!-- Enable Meshnet -->
+        <div id="viewEnableMeshnet" class="setup-card" style="display:none;">
+            <h2>Enable Meshnet</h2>
+            <p>Meshnet is currently disabled. Enable it to start connecting devices securely.</p>
+            <button class="btn btn-primary" onclick="enableMeshnet()">
+                Enable Meshnet
+            </button>
+            <button class="btn btn-outline" onclick="doLogout()" style="margin-left:0.5rem;">
+                Logout
+            </button>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="viewDashboard" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <h2 style="font-size:1.2rem;">Meshnet Dashboard</h2>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn btn-outline btn-sm" onclick="refreshAll()">Refresh</button>
+                    <button class="btn btn-outline btn-sm" onclick="disableMeshnet()">Disable Meshnet</button>
+                    <button class="btn btn-outline btn-sm" onclick="doLogout()">Logout</button>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="peers" onclick="switchTab('peers')">Peers</button>
+                <button class="tab" data-tab="invite" onclick="switchTab('invite')">Send Invitation</button>
+                <button class="tab" data-tab="invitations" onclick="switchTab('invitations')">Invitations</button>
+            </div>
+
+            <!-- Peers Tab -->
+            <div class="tab-panel active" id="tabPeers">
+                <div id="peerList">
+                    <div class="empty">Loading peers...</div>
+                </div>
+            </div>
+
+            <!-- Invite Tab -->
+            <div class="tab-panel" id="tabInvite">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Send Meshnet Invitation</h3>
+                    </div>
+                    <div class="invite-form" style="margin-bottom:1rem;">
+                        <div class="form-group">
+                            <label for="invEmail">Email Address</label>
+                            <input type="email" id="invEmail" placeholder="user@example.com">
+                        </div>
+                        <button class="btn btn-primary" onclick="sendInvitation()" style="margin-bottom:0;">
+                            Send Invitation
+                        </button>
+                    </div>
+                    <h4 style="font-size:0.85rem; color:var(--nord-muted); margin-bottom:0.75rem;">Grant permissions with invitation:</h4>
+                    <div class="permissions" id="invPerms">
+                        <label class="perm-toggle" data-perm="incoming" onclick="this.classList.toggle('active')">
+                            Incoming Traffic
+                        </label>
+                        <label class="perm-toggle" data-perm="routing" onclick="this.classList.toggle('active')">
+                            Traffic Routing
+                        </label>
+                        <label class="perm-toggle" data-perm="local" onclick="this.classList.toggle('active')">
+                            Local Network
+                        </label>
+                        <label class="perm-toggle" data-perm="fileshare" onclick="this.classList.toggle('active')">
+                            File Sharing
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invitations Tab -->
+            <div class="tab-panel" id="tabInvitations">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Sent Invitations</h3>
+                        <button class="btn btn-outline btn-sm" onclick="loadInvitations()">Refresh</button>
+                    </div>
+                    <div id="sentInvitations">
+                        <div class="empty">Loading...</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Received Invitations</h3>
+                    </div>
+                    <div id="receivedInvitations">
+                        <div class="empty">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="spinner"></div>
+            <p id="loadingText">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toasts"></div>
+
+    <script>
+        // --- Utilities ---
+        function toast(message, type = 'info') {
+            const container = document.getElementById('toasts');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 3500);
+        }
+
+        function showLoading(text = 'Processing...') {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.add('visible');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('visible');
+        }
+
+        async function api(url, method = 'GET', body = null) {
+            const opts = { method, headers: {} };
+            if (body) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(body);
+            }
+            const res = await fetch(url, opts);
+            return res.json();
+        }
+
+        // --- Views ---
+        function showView(id) {
+            ['viewInstall', 'viewLogin', 'viewEnableMeshnet', 'viewDashboard'].forEach(v => {
+                document.getElementById(v).style.display = 'none';
+            });
+            document.getElementById(id).style.display = '';
+        }
+
+        function updateStatusBar(status) {
+            const di = document.getElementById('dotInstalled');
+            const dl = document.getElementById('dotLoggedIn');
+            const dm = document.getElementById('dotMeshnet');
+            const li = document.getElementById('lblInstalled');
+            const ll = document.getElementById('lblLoggedIn');
+            const lm = document.getElementById('lblMeshnet');
+
+            if (status.installed) {
+                di.className = 'status-dot green'; li.textContent = 'Installed';
+            } else {
+                di.className = 'status-dot red'; li.textContent = 'Not installed';
+            }
+            if (status.logged_in) {
+                dl.className = 'status-dot green'; ll.textContent = 'Logged in';
+            } else {
+                dl.className = 'status-dot red'; ll.textContent = 'Not logged in';
+            }
+            if (status.meshnet_enabled) {
+                dm.className = 'status-dot green'; lm.textContent = 'Meshnet on';
+            } else {
+                dm.className = 'status-dot orange'; lm.textContent = 'Meshnet off';
+            }
+        }
+
+        // --- Tab switching ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+
+            if (tab === 'invitations') loadInvitations();
+        }
+
+        // --- Status & routing ---
+        async function checkStatus() {
+            const status = await api('/api/status');
+            updateStatusBar(status);
+            if (!status.installed) {
+                showView('viewInstall');
+            } else if (!status.logged_in) {
+                showView('viewLogin');
+            } else if (!status.meshnet_enabled) {
+                showView('viewEnableMeshnet');
+            } else {
+                showView('viewDashboard');
+                loadPeers();
+            }
+        }
+
+        // --- Actions ---
+        async function installNordVPN() {
+            showLoading('Installing NordVPN... This may take a minute.');
+            const r = await api('/api/install', 'POST');
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            checkStatus();
+        }
+
+        async function loginWithToken() {
+            const token = document.getElementById('loginToken').value.trim();
+            if (!token) { toast('Please enter a token.', 'error'); return; }
+            showLoading('Logging in...');
+            const r = await api('/api/login', 'POST', { token });
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            if (r.success) checkStatus();
+        }
+
+        async function loginBrowser() {
+            showLoading('Requesting login URL...');
+            const r = await api('/api/login', 'POST');
+            hideLoading();
+            if (r.success && r.message.startsWith('http')) {
+                document.getElementById('loginUrl').style.display = '';
+                const link = document.getElementById('loginUrlLink');
+                link.href = r.message;
+                link.textContent = r.message;
+                toast('Open the URL to complete login.', 'info');
+            } else {
+                toast(r.message, r.success ? 'success' : 'error');
+                if (r.success) checkStatus();
+            }
+        }
+
+        async function doLogout() {
+            showLoading('Logging out...');
+            const r = await api('/api/logout', 'POST');
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            checkStatus();
+        }
+
+        async function enableMeshnet() {
+            showLoading('Enabling Meshnet...');
+            const r = await api('/api/meshnet/enable', 'POST');
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            checkStatus();
+        }
+
+        async function disableMeshnet() {
+            if (!confirm('Disable Meshnet? All peer connections will be dropped.')) return;
+            showLoading('Disabling Meshnet...');
+            const r = await api('/api/meshnet/disable', 'POST');
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            checkStatus();
+        }
+
+        // --- Peers ---
+        async function loadPeers() {
+            const peers = await api('/api/peers');
+            const container = document.getElementById('peerList');
+            if (!peers.length) {
+                container.innerHTML = '<div class="empty">No peers connected. Send an invitation to get started.</div>';
+                return;
+            }
+            container.innerHTML = peers.map(p => renderPeer(p)).join('');
+        }
+
+        function renderPeer(peer) {
+            const permKeys = [
+                { key: 'incoming', label: 'Incoming Traffic' },
+                { key: 'routing', label: 'Traffic Routing' },
+                { key: 'local', label: 'Local Network' },
+                { key: 'fileshare', label: 'File Sharing' },
+                { key: 'auto-accept', label: 'Auto Accept' },
+            ];
+            const perms = peer.permissions || {};
+            const hostname = escapeHtml(peer.hostname || 'Unknown');
+            const permHtml = permKeys.map(pk => {
+                const active = perms[pk.key] || perms[pk.key.replace('-', '_')] ? 'active' : '';
+                return `<label class="perm-toggle ${active}"
+                    data-perm="${pk.key}" data-peer="${hostname}"
+                    onclick="togglePeerPerm(this, '${hostname}', '${pk.key}')">
+                    ${pk.label}
+                </label>`;
+            }).join('');
+
+            return `<div class="peer">
+                <div class="peer-info">
+                    <h4>${hostname}</h4>
+                    <div class="peer-meta">
+                        <span>Status: ${escapeHtml(peer.status)}</span>
+                        ${peer.ip ? `<span>IP: ${escapeHtml(peer.ip)}</span>` : ''}
+                        ${peer.os ? `<span>OS: ${escapeHtml(peer.os)}</span>` : ''}
+                    </div>
+                    <div class="permissions">${permHtml}</div>
+                </div>
+                <div class="peer-actions">
+                    <button class="btn btn-danger btn-sm" onclick="removePeer('${hostname}')">Remove</button>
+                </div>
+            </div>`;
+        }
+
+        async function togglePeerPerm(el, peer, perm) {
+            const allow = !el.classList.contains('active');
+            const r = await api(`/api/peers/${encodeURIComponent(peer)}/permissions`, 'POST', { [perm]: allow });
+            const result = r[0];
+            if (result && result.success) {
+                el.classList.toggle('active');
+                toast(`${perm}: ${allow ? 'allowed' : 'denied'}`, 'success');
+            } else {
+                toast(result ? result.message : 'Failed', 'error');
+            }
+        }
+
+        async function removePeer(peer) {
+            if (!confirm(`Remove peer "${peer}"?`)) return;
+            showLoading('Removing peer...');
+            const r = await api(`/api/peers/${encodeURIComponent(peer)}/remove`, 'POST');
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            if (r.success) loadPeers();
+        }
+
+        // --- Invitations ---
+        async function sendInvitation() {
+            const email = document.getElementById('invEmail').value.trim();
+            if (!email) { toast('Enter an email address.', 'error'); return; }
+            const perms = {};
+            document.querySelectorAll('#invPerms .perm-toggle.active').forEach(el => {
+                perms[el.dataset.perm] = true;
+            });
+            showLoading('Sending invitation...');
+            const r = await api('/api/invitations/send', 'POST', { email, permissions: perms });
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            if (r.success) {
+                document.getElementById('invEmail').value = '';
+                document.querySelectorAll('#invPerms .perm-toggle').forEach(el => el.classList.remove('active'));
+            }
+        }
+
+        async function loadInvitations() {
+            const data = await api('/api/invitations');
+            const sentC = document.getElementById('sentInvitations');
+            const recC = document.getElementById('receivedInvitations');
+
+            if (!data.sent.length) {
+                sentC.innerHTML = '<div class="empty">No sent invitations.</div>';
+            } else {
+                sentC.innerHTML = data.sent.map(s => `
+                    <div class="inv-item">
+                        <span>${escapeHtml(s)}</span>
+                        <button class="btn btn-danger btn-sm" onclick="revokeInvitation('${escapeHtml(s)}')">Revoke</button>
+                    </div>
+                `).join('');
+            }
+
+            if (!data.received.length) {
+                recC.innerHTML = '<div class="empty">No received invitations.</div>';
+            } else {
+                recC.innerHTML = data.received.map(r => `
+                    <div class="inv-item">
+                        <span>${escapeHtml(r)}</span>
+                        <div style="display:flex;gap:0.4rem;">
+                            <button class="btn btn-success btn-sm" onclick="acceptInv('${escapeHtml(r)}')">Accept</button>
+                            <button class="btn btn-danger btn-sm" onclick="denyInv('${escapeHtml(r)}')">Deny</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        async function revokeInvitation(email) {
+            if (!confirm(`Revoke invitation to "${email}"?`)) return;
+            const r = await api('/api/invitations/revoke', 'POST', { email });
+            toast(r.message, r.success ? 'success' : 'error');
+            if (r.success) loadInvitations();
+        }
+
+        async function acceptInv(email) {
+            showLoading('Accepting invitation...');
+            const r = await api('/api/invitations/accept', 'POST', { email, permissions: {} });
+            hideLoading();
+            toast(r.message, r.success ? 'success' : 'error');
+            loadInvitations();
+            loadPeers();
+        }
+
+        async function denyInv(email) {
+            if (!confirm(`Deny invitation from "${email}"?`)) return;
+            const r = await api('/api/invitations/deny', 'POST', { email });
+            toast(r.message, r.success ? 'success' : 'error');
+            loadInvitations();
+        }
+
+        async function refreshAll() {
+            await checkStatus();
+            toast('Refreshed', 'info');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // --- Init ---
+        checkStatus();
+    </script>
+</body>
+</html>

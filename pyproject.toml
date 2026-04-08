@@ -1,0 +1,12 @@
+[project]
+name = "nordvpn-meshnet-ui"
+version = "1.0.0"
+description = "Web UI for managing NordVPN Meshnet on Raspberry Pi"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "gunicorn>=21.2",
+]
+
+[tool.uv]
+dev-dependencies = []
