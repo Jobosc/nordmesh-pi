@@ -64,6 +64,13 @@ def api_set_permissions(peer):
     return jsonify([{"permission": p, "success": s, "message": m} for p, s, m in results])
 
 
+@app.route("/api/peers/<path:peer>/nickname", methods=["POST"])
+def api_set_nickname(peer):
+    nickname = request.json.get("nickname", "")
+    ok, msg = nordvpn.set_nickname(peer, nickname)
+    return jsonify({"success": ok, "message": msg})
+
+
 @app.route("/api/peers/<path:peer>/remove", methods=["POST"])
 def api_remove_peer(peer):
     ok, msg = nordvpn.remove_peer(peer)

@@ -133,7 +133,7 @@ def _parse_peer_list(raw: str) -> list[dict]:
     peers = []
     current = None
     pending = {}  # buffer for fields that appear before Hostname
-    section = "local"  # nordvpn lists local (own) devices first
+    section = "self"  # nordvpn lists "This device" first
 
     def _flush():
         nonlocal current, pending
@@ -154,7 +154,11 @@ def _parse_peer_list(raw: str) -> list[dict]:
                 _flush()
                 section = "external"
                 continue
-            if "local" in low or "this device" in low:
+            if "this device" in low:
+                _flush()
+                section = "self"
+                continue
+            if "local" in low:
                 _flush()
                 section = "local"
                 continue
@@ -162,7 +166,7 @@ def _parse_peer_list(raw: str) -> list[dict]:
         # Lines without colon are bare hostnames (fallback format)
         if ":" not in line:
             _flush()
-            current = {"hostname": line, "status": "unknown", "is_local": section == "local", "permissions": {}}
+            current = {"hostname": line, "status": "unknown", "is_local": section in ("self", "local"), "is_self": section == "self", "permissions": {}}
             continue
 
         # Key-value lines
@@ -173,7 +177,7 @@ def _parse_peer_list(raw: str) -> list[dict]:
         # "Hostname:" starts a new peer
         if key_norm == "hostname":
             _flush()
-            current = {"hostname": val, "status": "unknown", "is_local": section == "local", "permissions": {}}
+            current = {"hostname": val, "status": "unknown", "is_local": section in ("self", "local"), "is_self": section == "self", "permissions": {}}
             # Apply any buffered fields (e.g. Nickname that appeared first)
             if pending:
                 for pk, pv in pending.items():
@@ -205,7 +209,6 @@ def _parse_peer_list(raw: str) -> list[dict]:
             current[key_norm] = val
 
     _flush()
-    return peers
     return peers
 
 
@@ -309,6 +312,15 @@ def accept_invitation(email: str, permissions: dict[str, bool] | None = None) ->
 
 def deny_invitation(email: str) -> tuple[bool, str]:
     code, out, err = _run(["nordvpn", "meshnet", "inv", "deny", email])
+    return code == 0, out or err
+
+
+def set_nickname(peer: str, nickname: str) -> tuple[bool, str]:
+    """Set or remove a nickname for a peer."""
+    if nickname:
+        code, out, err = _run(["nordvpn", "meshnet", "peer", "nickname", "set", peer, nickname])
+    else:
+        code, out, err = _run(["nordvpn", "meshnet", "peer", "nickname", "remove", peer])
     return code == 0, out or err
 
 

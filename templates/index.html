@@ -736,7 +736,7 @@
             const peers = await api('/api/peers');
             const localContainer = document.getElementById('peerListLocal');
             const externalContainer = document.getElementById('peerListExternal');
-            const localPeers = peers.filter(p => p.is_local);
+            const localPeers = peers.filter(p => p.is_local && !p.is_self);
             const externalPeers = peers.filter(p => !p.is_local);
 
             if (!localPeers.length) {
@@ -758,7 +758,6 @@
                 { key: 'routing', label: 'Traffic Routing' },
                 { key: 'local_network', label: 'Local Network', cli: 'local' },
                 { key: 'fileshare', label: 'File Sharing' },
-                { key: 'auto_accept', label: 'Auto Accept', cli: 'auto-accept' },
             ];
             const perms = peer.permissions || {};
             const hostname = escapeHtml(peer.hostname || 'Unknown');
@@ -776,7 +775,20 @@
 
             return `<div class="peer">
                 <div class="peer-info">
-                    <h4>${displayName}</h4>
+                    <h4>
+                        <span class="peer-display-name" id="display-${hostname}">${displayName}</span>
+                        <button class="btn btn-outline btn-sm" style="margin-left:0.5rem; padding:0.2rem 0.5rem; font-size:0.75rem;"
+                            onclick="startEditNickname('${hostname}', '${nickname}')">Edit</button>
+                    </h4>
+                    <div class="nickname-edit" id="edit-${hostname}" style="display:none; margin-bottom:0.5rem;">
+                        <div style="display:flex; gap:0.4rem; align-items:center;">
+                            <input type="text" id="input-${hostname}" placeholder="Enter nickname..."
+                                style="padding:0.3rem 0.6rem; font-size:0.85rem; width:200px;"
+                                onkeydown="if(event.key==='Enter')saveNickname('${hostname}')">
+                            <button class="btn btn-primary btn-sm" onclick="saveNickname('${hostname}')">Save</button>
+                            <button class="btn btn-outline btn-sm" onclick="cancelEditNickname('${hostname}')">Cancel</button>
+                        </div>
+                    </div>
                     ${nickname ? `<div class="peer-meta"><span>${hostname}</span></div>` : ''}
                     <div class="peer-meta">
                         <span>Status: ${escapeHtml(peer.status)}</span>
@@ -810,6 +822,30 @@
             hideLoading();
             toast(r.message, r.success ? 'success' : 'error');
             if (r.success) loadPeers();
+        }
+
+        // --- Nickname editing ---
+        function startEditNickname(hostname, currentNickname) {
+            document.getElementById(`edit-${hostname}`).style.display = '';
+            const input = document.getElementById(`input-${hostname}`);
+            input.value = currentNickname;
+            input.focus();
+        }
+
+        function cancelEditNickname(hostname) {
+            document.getElementById(`edit-${hostname}`).style.display = 'none';
+        }
+
+        async function saveNickname(hostname) {
+            const input = document.getElementById(`input-${hostname}`);
+            const nickname = input.value.trim();
+            const r = await api(`/api/peers/${encodeURIComponent(hostname)}/nickname`, 'POST', { nickname });
+            if (r.success) {
+                toast(nickname ? `Nickname set to "${nickname}"` : 'Nickname removed', 'success');
+                loadPeers();
+            } else {
+                toast(r.message || 'Failed to update nickname', 'error');
+            }
         }
 
         // --- Invitations ---
