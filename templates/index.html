@@ -756,24 +756,28 @@
             const permKeys = [
                 { key: 'incoming', label: 'Incoming Traffic' },
                 { key: 'routing', label: 'Traffic Routing' },
-                { key: 'local', label: 'Local Network' },
+                { key: 'local_network', label: 'Local Network', cli: 'local' },
                 { key: 'fileshare', label: 'File Sharing' },
-                { key: 'auto-accept', label: 'Auto Accept' },
+                { key: 'auto_accept', label: 'Auto Accept', cli: 'auto-accept' },
             ];
             const perms = peer.permissions || {};
             const hostname = escapeHtml(peer.hostname || 'Unknown');
+            const nickname = peer.nickname ? escapeHtml(peer.nickname) : '';
+            const displayName = nickname || hostname;
             const permHtml = permKeys.map(pk => {
-                const active = perms[pk.key] || perms[pk.key.replace('-', '_')] ? 'active' : '';
+                const active = perms[pk.key] ? 'active' : '';
+                const cliPerm = pk.cli || pk.key;
                 return `<label class="perm-toggle ${active}"
-                    data-perm="${pk.key}" data-peer="${hostname}"
-                    onclick="togglePeerPerm(this, '${hostname}', '${pk.key}')">
+                    data-perm="${cliPerm}" data-peer="${hostname}"
+                    onclick="togglePeerPerm(this, '${hostname}', '${cliPerm}')">
                     ${pk.label}
                 </label>`;
             }).join('');
 
             return `<div class="peer">
                 <div class="peer-info">
-                    <h4>${hostname}</h4>
+                    <h4>${displayName}</h4>
+                    ${nickname ? `<div class="peer-meta"><span>${hostname}</span></div>` : ''}
                     <div class="peer-meta">
                         <span>Status: ${escapeHtml(peer.status)}</span>
                         ${peer.ip ? `<span>IP: ${escapeHtml(peer.ip)}</span>` : ''}

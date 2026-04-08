@@ -107,71 +107,105 @@ def list_peers() -> list[dict]:
 
 
 def _parse_peer_list(raw: str) -> list[dict]:
-    """Parse the nordvpn meshnet peer list output into structured data."""
+    """Parse the nordvpn meshnet peer list output into structured data.
+
+    The nordvpn CLI outputs peers in sections: "This device:", "Local Peers:",
+    "External Peers:". Each peer has "Hostname:" and "Nickname:" fields (in
+    either order), plus permission lines like "Allow Incoming Traffic: enabled".
+    """
+    # Map CLI output keys to internal permission names used by the frontend
+    # "Allow X" = permissions you grant to the peer
+    PERM_MAP = {
+        "allow_incoming_traffic": "incoming",
+        "allow_routing": "routing",
+        "allow_local_network_access": "local_network",
+        "allow_sending_files": "fileshare",
+        "accept_fileshare_automatically": "auto_accept",
+    }
+    # "Allows X" = permissions the peer grants to you (read-only info)
+    ALLOWS_MAP = {
+        "allows_incoming_traffic": "allows_incoming",
+        "allows_routing": "allows_routing",
+        "allows_local_network_access": "allows_local_network",
+        "allows_sending_files": "allows_fileshare",
+    }
+
     peers = []
     current = None
-    section = "local"  # default; nordvpn lists local (own) devices first
+    pending = {}  # buffer for fields that appear before Hostname
+    section = "local"  # nordvpn lists local (own) devices first
+
+    def _flush():
+        nonlocal current, pending
+        if current:
+            peers.append(current)
+        current = None
+        pending = {}
+
     for line in raw.splitlines():
         line = line.strip()
         if not line or line.startswith("-") or line.startswith("="):
             continue
 
-        # Detect section headers like "Local Peers:", "External Peers:", etc.
+        # Detect section headers: "This device:", "Local Peers:", "External Peers:"
         low = line.lower()
-        if ":" in line and not current:
-            # Before any peer is found, check for section headers
+        if ":" in line and line.split(":", 1)[1].strip() == "":
             if "external" in low:
+                _flush()
                 section = "external"
                 continue
             if "local" in low or "this device" in low:
-                section = "local"
-                continue
-        # Section headers can also appear between peers
-        if ":" in line and line.split(":")[1].strip() == "":
-            if "external" in low:
-                if current:
-                    peers.append(current)
-                    current = None
-                section = "external"
-                continue
-            if "local" in low or "this device" in low:
-                if current:
-                    peers.append(current)
-                    current = None
+                _flush()
                 section = "local"
                 continue
 
-        # Detect peer header lines (hostname lines)
-        if ":" not in line and line and not line.startswith(" "):
-            if current:
-                peers.append(current)
+        # Lines without colon are bare hostnames (fallback format)
+        if ":" not in line:
+            _flush()
             current = {"hostname": line, "status": "unknown", "is_local": section == "local", "permissions": {}}
             continue
 
-        if current and ":" in line:
-            key, val = line.split(":", 1)
-            key = key.strip().lower().replace(" ", "_")
-            val = val.strip()
-            if key == "status":
-                current["status"] = val
-            elif key == "ip":
-                current["ip"] = val
-            elif key == "os":
-                current["os"] = val
-            elif key in (
-                "incoming",
-                "routing",
-                "local_network",
-                "fileshare",
-                "auto_accept",
-                "peer_send_files",
-            ):
-                current["permissions"][key] = val.lower() in ("allowed", "enabled", "true")
-            else:
-                current[key] = val
+        # Key-value lines
+        key, val = line.split(":", 1)
+        key_norm = key.strip().lower().replace(" ", "_")
+        val = val.strip()
 
-    if current:
-        peers.append(current)
+        # "Hostname:" starts a new peer
+        if key_norm == "hostname":
+            _flush()
+            current = {"hostname": val, "status": "unknown", "is_local": section == "local", "permissions": {}}
+            # Apply any buffered fields (e.g. Nickname that appeared first)
+            if pending:
+                for pk, pv in pending.items():
+                    current[pk] = pv
+                pending = {}
+            continue
+
+        # If we have no current peer yet, buffer the field until Hostname appears
+        if current is None:
+            if key_norm == "nickname" and val != "-":
+                pending["nickname"] = val
+            continue
+
+        # Standard fields
+        if key_norm == "status":
+            current["status"] = val
+        elif key_norm == "ip":
+            current["ip"] = val
+        elif key_norm == "os":
+            current["os"] = val
+        elif key_norm == "nickname":
+            if val != "-":
+                current["nickname"] = val
+        elif key_norm in PERM_MAP:
+            current["permissions"][PERM_MAP[key_norm]] = val.lower() in ("allowed", "enabled", "true")
+        elif key_norm in ALLOWS_MAP:
+            current["permissions"][ALLOWS_MAP[key_norm]] = val.lower() in ("allowed", "enabled", "true")
+        else:
+            current[key_norm] = val
+
+    _flush()
+    return peers
     return peers
 
 
