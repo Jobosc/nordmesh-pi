@@ -144,7 +144,12 @@ def _parse_peer_list(raw: str) -> list[dict]:
 
     for line in raw.splitlines():
         line = line.strip()
-        if not line or line.startswith("-") or line.startswith("="):
+        if line.startswith("-") or line.startswith("="):
+            continue
+        # Blank lines separate peers — flush the current peer
+        if not line:
+            if current:
+                _flush()
             continue
 
         # Detect section headers: "This device:", "Local Peers:", "External Peers:"
