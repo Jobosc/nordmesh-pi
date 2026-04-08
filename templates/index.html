@@ -733,7 +733,6 @@
 
         // --- Peers ---
         async function loadPeers() {
-            peerIndex = 0;
             const peers = await api('/api/peers');
             const localContainer = document.getElementById('peerListLocal');
             const externalContainer = document.getElementById('peerListExternal');
@@ -753,10 +752,7 @@
             }
         }
 
-        let peerIndex = 0;
-
         function renderPeer(peer) {
-            const idx = peerIndex++;
             const permKeys = [
                 { key: 'incoming', label: 'Incoming Traffic' },
                 { key: 'routing', label: 'Traffic Routing' },
@@ -764,36 +760,36 @@
                 { key: 'fileshare', label: 'File Sharing' },
             ];
             const perms = peer.permissions || {};
-            const hostname = peer.hostname || 'Unknown';
-            const nickname = peer.nickname || '';
-            const displayName = escapeHtml(nickname || hostname);
+            const hostname = escapeHtml(peer.hostname || 'Unknown');
+            const nickname = peer.nickname ? escapeHtml(peer.nickname) : '';
+            const displayName = nickname || hostname;
             const permHtml = permKeys.map(pk => {
                 const active = perms[pk.key] ? 'active' : '';
                 const cliPerm = pk.cli || pk.key;
                 return `<label class="perm-toggle ${active}"
-                    data-perm="${cliPerm}" data-hostname="${escapeAttr(hostname)}"
-                    onclick="togglePeerPerm(this)">
+                    data-perm="${cliPerm}" data-peer="${hostname}"
+                    onclick="togglePeerPerm(this, '${hostname}', '${cliPerm}')">
                     ${pk.label}
                 </label>`;
             }).join('');
 
-            return `<div class="peer" data-hostname="${escapeAttr(hostname)}" data-nickname="${escapeAttr(nickname)}">
+            return `<div class="peer">
                 <div class="peer-info">
                     <h4>
-                        <span>${displayName}</span>
+                        <span class="peer-display-name" id="display-${hostname}">${displayName}</span>
                         <button class="btn btn-outline btn-sm" style="margin-left:0.5rem; padding:0.2rem 0.5rem; font-size:0.75rem;"
-                            onclick="startEditNickname(${idx})">Edit</button>
+                            onclick="startEditNickname('${hostname}', '${nickname}')">Edit</button>
                     </h4>
-                    <div class="nickname-edit" id="nick-edit-${idx}" style="display:none; margin-bottom:0.5rem;">
+                    <div class="nickname-edit" id="edit-${hostname}" style="display:none; margin-bottom:0.5rem;">
                         <div style="display:flex; gap:0.4rem; align-items:center;">
-                            <input type="text" id="nick-input-${idx}" placeholder="Enter nickname..."
+                            <input type="text" id="input-${hostname}" placeholder="Enter nickname..."
                                 style="padding:0.3rem 0.6rem; font-size:0.85rem; width:200px;"
-                                onkeydown="if(event.key==='Enter')saveNickname(${idx})">
-                            <button class="btn btn-primary btn-sm" onclick="saveNickname(${idx})">Save</button>
-                            <button class="btn btn-outline btn-sm" onclick="cancelEditNickname(${idx})">Cancel</button>
+                                onkeydown="if(event.key==='Enter')saveNickname('${hostname}')">
+                            <button class="btn btn-primary btn-sm" onclick="saveNickname('${hostname}')">Save</button>
+                            <button class="btn btn-outline btn-sm" onclick="cancelEditNickname('${hostname}')">Cancel</button>
                         </div>
                     </div>
-                    ${nickname ? `<div class="peer-meta"><span>${escapeHtml(hostname)}</span></div>` : ''}
+                    ${nickname ? `<div class="peer-meta"><span>${hostname}</span></div>` : ''}
                     <div class="peer-meta">
                         <span>Status: ${escapeHtml(peer.status)}</span>
                         ${peer.ip ? `<span>IP: ${escapeHtml(peer.ip)}</span>` : ''}
@@ -802,14 +798,12 @@
                     <div class="permissions">${permHtml}</div>
                 </div>
                 <div class="peer-actions">
-                    <button class="btn btn-danger btn-sm" onclick="removePeer(this)">Remove</button>
+                    <button class="btn btn-danger btn-sm" onclick="removePeer('${hostname}')">Remove</button>
                 </div>
             </div>`;
         }
 
-        async function togglePeerPerm(el) {
-            const peer = el.dataset.hostname;
-            const perm = el.dataset.perm;
+        async function togglePeerPerm(el, peer, perm) {
             const allow = !el.classList.contains('active');
             const r = await api(`/api/peers/${encodeURIComponent(peer)}/permissions`, 'POST', { [perm]: allow });
             const result = r[0];
@@ -821,8 +815,7 @@
             }
         }
 
-        async function removePeer(btn) {
-            const peer = btn.closest('.peer').dataset.hostname;
+        async function removePeer(peer) {
             if (!confirm(`Remove peer "${peer}"?`)) return;
             showLoading('Removing peer...');
             const r = await api(`/api/peers/${encodeURIComponent(peer)}/remove`, 'POST');
@@ -832,28 +825,24 @@
         }
 
         // --- Nickname editing ---
-        function startEditNickname(idx) {
-            const editDiv = document.getElementById(`nick-edit-${idx}`);
-            const peerEl = editDiv.closest('.peer');
-            editDiv.style.display = '';
-            const input = document.getElementById(`nick-input-${idx}`);
-            input.value = peerEl.dataset.nickname;
+        function startEditNickname(hostname, currentNickname) {
+            document.getElementById(`edit-${hostname}`).style.display = '';
+            const input = document.getElementById(`input-${hostname}`);
+            input.value = currentNickname;
             input.focus();
         }
 
-        function cancelEditNickname(idx) {
-            document.getElementById(`nick-edit-${idx}`).style.display = 'none';
+        function cancelEditNickname(hostname) {
+            document.getElementById(`edit-${hostname}`).style.display = 'none';
         }
 
-        async function saveNickname(idx) {
-            const editDiv = document.getElementById(`nick-edit-${idx}`);
-            const hostname = editDiv.closest('.peer').dataset.hostname;
-            const input = document.getElementById(`nick-input-${idx}`);
+        async function saveNickname(hostname) {
+            const input = document.getElementById(`input-${hostname}`);
             const nickname = input.value.trim();
             const r = await api(`/api/peers/${encodeURIComponent(hostname)}/nickname`, 'POST', { nickname });
             if (r.success) {
                 toast(nickname ? `Nickname set to "${nickname}"` : 'Nickname removed', 'success');
-                checkStatus();
+                loadPeers();
             } else {
                 toast(r.message || 'Failed to update nickname', 'error');
             }
@@ -940,10 +929,6 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
-        }
-
-        function escapeAttr(str) {
-            return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
         // --- Init ---
