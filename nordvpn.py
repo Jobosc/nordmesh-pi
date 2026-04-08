@@ -110,16 +110,42 @@ def _parse_peer_list(raw: str) -> list[dict]:
     """Parse the nordvpn meshnet peer list output into structured data."""
     peers = []
     current = None
+    section = "local"  # default; nordvpn lists local (own) devices first
     for line in raw.splitlines():
         line = line.strip()
         if not line or line.startswith("-") or line.startswith("="):
             continue
 
+        # Detect section headers like "Local Peers:", "External Peers:", etc.
+        low = line.lower()
+        if ":" in line and not current:
+            # Before any peer is found, check for section headers
+            if "external" in low:
+                section = "external"
+                continue
+            if "local" in low or "this device" in low:
+                section = "local"
+                continue
+        # Section headers can also appear between peers
+        if ":" in line and line.split(":")[1].strip() == "":
+            if "external" in low:
+                if current:
+                    peers.append(current)
+                    current = None
+                section = "external"
+                continue
+            if "local" in low or "this device" in low:
+                if current:
+                    peers.append(current)
+                    current = None
+                section = "local"
+                continue
+
         # Detect peer header lines (hostname lines)
         if ":" not in line and line and not line.startswith(" "):
             if current:
                 peers.append(current)
-            current = {"hostname": line, "status": "unknown", "permissions": {}}
+            current = {"hostname": line, "status": "unknown", "is_local": section == "local", "permissions": {}}
             continue
 
         if current and ":" in line:

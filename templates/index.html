@@ -497,8 +497,21 @@
 
             <!-- Peers Tab -->
             <div class="tab-panel active" id="tabPeers">
-                <div id="peerList">
-                    <div class="empty">Loading peers...</div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>My Devices</h3>
+                    </div>
+                    <div id="peerListLocal">
+                        <div class="empty">Loading peers...</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>External Devices</h3>
+                    </div>
+                    <div id="peerListExternal">
+                        <div class="empty">Loading peers...</div>
+                    </div>
                 </div>
             </div>
 
@@ -721,12 +734,22 @@
         // --- Peers ---
         async function loadPeers() {
             const peers = await api('/api/peers');
-            const container = document.getElementById('peerList');
-            if (!peers.length) {
-                container.innerHTML = '<div class="empty">No peers connected. Send an invitation to get started.</div>';
-                return;
+            const localContainer = document.getElementById('peerListLocal');
+            const externalContainer = document.getElementById('peerListExternal');
+            const localPeers = peers.filter(p => p.is_local);
+            const externalPeers = peers.filter(p => !p.is_local);
+
+            if (!localPeers.length) {
+                localContainer.innerHTML = '<div class="empty">No local devices found.</div>';
+            } else {
+                localContainer.innerHTML = localPeers.map(p => renderPeer(p)).join('');
             }
-            container.innerHTML = peers.map(p => renderPeer(p)).join('');
+
+            if (!externalPeers.length) {
+                externalContainer.innerHTML = '<div class="empty">No external devices. Send an invitation to get started.</div>';
+            } else {
+                externalContainer.innerHTML = externalPeers.map(p => renderPeer(p)).join('');
+            }
         }
 
         function renderPeer(peer) {
