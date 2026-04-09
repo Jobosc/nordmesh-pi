@@ -6,6 +6,13 @@ import nordvpn
 app = Flask(__name__)
 
 
+@app.after_request
+def allow_iframe(response):
+    response.headers["X-Frame-Options"] = "ALLOWALL"
+    response.headers["Content-Security-Policy"] = "frame-ancestors *"
+    return response
+
+
 @app.route("/")
 def index():
     status = nordvpn.get_status()
