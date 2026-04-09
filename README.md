@@ -3,19 +3,20 @@
 A lightweight web UI for managing NordVPN Meshnet on a Raspberry Pi. Run it on the Pi and control everything from any browser on your network.
 
 ```
-[Your browser] --HTTP--> [Flask on Raspberry Pi] --CLI--> [nordvpn]
+[Your browser] --HTTPS--> [Caddy on Raspberry Pi] --HTTP--> [Flask] --CLI--> [nordvpn]
 ```
 
 ## Features
 
 - **Guided setup** -- Installs NordVPN, handles login, and enables Meshnet step by step
-- **Peer management** -- View all connected peers with live permission toggles:
+- **Peer management** -- View peers split into "My Devices" and "External Devices", with live permission toggles:
   - Incoming traffic
   - Traffic routing
   - Local network access
   - File sharing
-  - Auto-accept file transfers
+- **Nickname editing** -- Set or change nicknames for any peer directly from the UI
 - **Invitations** -- Send invitations with pre-selected permissions, revoke sent ones, accept or deny received ones
+- **Home Assistant compatible** -- Embeddable via iframe (Webpage card)
 - **Responsive dark UI** -- Works on desktop and mobile browsers
 
 ## Requirements
@@ -23,17 +24,18 @@ A lightweight web UI for managing NordVPN Meshnet on a Raspberry Pi. Run it on t
 - Raspberry Pi (or any Linux machine) with internet access
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) (the run script installs it automatically if missing)
-- NordVPN account with an active subscription
+- [NordVPN](https://nordvpn.com/download/linux/) installed and configured (`sh <(curl -sSf https://downloads.nordcdn.com/apps/linux/install.sh)`)
+- NordVPN account (an active subscription is **not** required — Meshnet is free for all NordVPN accounts)
+- [Caddy](https://caddyserver.com/) (optional, for HTTPS access — `sudo apt install caddy`)
 
 ## Quick Start
 
 ```bash
-git clone <repo-url> && cd nordvpn_meshnet
-chmod +x run.sh
+git clone https://github.com/Jobosc/nordmesh-pi.git
 ./run.sh
 ```
 
-Then open `http://<your-pi-ip>:5000` in a browser.
+Then open `http://localhost:5000` in a browser on the Pi. For remote access, set up Caddy as a reverse proxy (see [HTTPS with Caddy](#https-with-caddy)) and open `https://<your-pi-ip>` from any device on your network.
 
 If NordVPN is not yet installed, the UI will offer a one-click install. After that it guides you through login and enabling Meshnet.
 
@@ -52,7 +54,7 @@ For a long-running setup, use Gunicorn instead of the Flask dev server:
 ./run_production.sh
 ```
 
-This starts 2 Gunicorn workers on port 5000.
+This starts 2 Gunicorn workers on localhost port 5000 (not exposed externally — use Caddy for HTTPS access).
 
 ### Running as a systemd service
 
@@ -112,6 +114,7 @@ nordvpn_meshnet/
 | POST | `/api/meshnet/disable` | Disable Meshnet |
 | GET | `/api/peers` | List all Meshnet peers |
 | POST | `/api/peers/<peer>/permissions` | Set permissions for a peer |
+| POST | `/api/peers/<peer>/nickname` | Set or remove a peer nickname |
 | POST | `/api/peers/<peer>/remove` | Remove a peer |
 | GET | `/api/invitations` | List sent and received invitations |
 | POST | `/api/invitations/send` | Send invitation (`email`, `permissions`) |
@@ -119,10 +122,48 @@ nordvpn_meshnet/
 | POST | `/api/invitations/accept` | Accept a received invitation |
 | POST | `/api/invitations/deny` | Deny a received invitation |
 
+## HTTPS with Caddy
+
+To serve the UI over HTTPS, install [Caddy](https://caddyserver.com/) and configure it as a reverse proxy.
+
+1. Install Caddy:
+
+```bash
+sudo apt install caddy
+```
+
+2. Find your Pi's local IP:
+
+```bash
+hostname -I
+```
+
+3. Edit `/etc/caddy/Caddyfile`:
+
+```
+https://192.168.1.100 {
+    reverse_proxy localhost:5000
+    tls internal
+}
+```
+
+Replace `192.168.1.100` with your Pi's actual IP. The `tls internal` directive generates a self-signed certificate (you'll see a one-time browser warning).
+
+4. Restart Caddy:
+
+```bash
+sudo systemctl restart caddy
+```
+
+The UI is now available at `https://<your-pi-ip>`. If you have a domain pointing to the Pi, replace the IP with your domain in the Caddyfile and remove `tls internal` — Caddy will automatically provision a Let's Encrypt certificate.
+
+### Home Assistant
+
+To embed the UI in a Home Assistant dashboard, add a **Webpage card** with the URL `https://<your-pi-ip>`.
+
 ## Security Note
 
-This UI has no authentication. Anyone who can reach port 5000 on your Pi can manage your Meshnet. To restrict access:
+This UI has no authentication. Flask binds to localhost only, so direct access is limited to the Pi itself. When using Caddy, anyone who can reach the Pi's HTTPS port can manage your Meshnet. To restrict access:
 
-- Bind to localhost only (`app.run(host="127.0.0.1")`) and use an SSH tunnel
-- Or place it behind a reverse proxy (Caddy, nginx) with basic auth
-- Or restrict access via firewall rules (`ufw allow from 192.168.1.0/24 to any port 5000`)
+- Add basic auth in the Caddyfile (`basicauth`)
+- Restrict access via firewall rules (`ufw allow from 192.168.1.0/24 to any port 443`)
