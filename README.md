@@ -65,6 +65,7 @@ Description=NordVPN Meshnet Manager
 After=network.target
 
 [Service]
+Environment="PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin"
 WorkingDirectory=/home/pi/nordvpn_meshnet
 ExecStart=/home/pi/nordvpn_meshnet/run_production.sh
 User=pi
@@ -86,6 +87,12 @@ The user running the app must be in the `nordvpn` group to execute CLI commands 
 ```bash
 sudo usermod -aG nordvpn $USER
 # Log out and back in for the group change to take effect
+```
+
+To ensure NordVPN reconnects automatically after a reboot:
+
+```bash
+nordvpn set autoconnect on
 ```
 
 ## Project Structure
