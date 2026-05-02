@@ -278,7 +278,7 @@ def set_all_permissions(peer: str, perms: dict[str, bool]) -> list[tuple[str, bo
 def send_invitation(email: str, permissions: dict[str, bool] | None = None) -> tuple[bool, str]:
     """Send a meshnet invitation to an email address with optional permissions."""
     cmd = ["nordvpn", "meshnet", "inv", "send"]
-    if permissions:
+    if permissions is not None:
         if permissions.get("incoming"):
             cmd.append("--allow-incoming-traffic")
         if permissions.get("routing"):
@@ -301,7 +301,7 @@ def revoke_invitation(email: str) -> tuple[bool, str]:
 
 def accept_invitation(email: str, permissions: dict[str, bool] | None = None) -> tuple[bool, str]:
     cmd = ["nordvpn", "meshnet", "inv", "accept"]
-    if permissions:
+    if permissions is not None:
         if permissions.get("incoming"):
             cmd.append("--allow-incoming-traffic")
         if permissions.get("routing"):

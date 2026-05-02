@@ -863,6 +863,7 @@
             if (r.success) {
                 document.getElementById('invEmail').value = '';
                 document.querySelectorAll('#invPerms .perm-toggle').forEach(el => el.classList.remove('active'));
+                loadInvitations();
             }
         }
 
@@ -886,11 +887,20 @@
                 recC.innerHTML = '<div class="empty">No received invitations.</div>';
             } else {
                 recC.innerHTML = data.received.map(r => `
-                    <div class="inv-item">
-                        <span>${escapeHtml(r)}</span>
-                        <div style="display:flex;gap:0.4rem;">
-                            <button class="btn btn-success btn-sm" onclick="acceptInv('${escapeHtml(r)}')">Accept</button>
-                            <button class="btn btn-danger btn-sm" onclick="denyInv('${escapeHtml(r)}')">Deny</button>
+                    <div class="inv-item" style="flex-direction:column;align-items:flex-start;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                            <span>${escapeHtml(r)}</span>
+                            <div style="display:flex;gap:0.4rem;">
+                                <button class="btn btn-success btn-sm" onclick="acceptInv('${escapeHtml(r)}')">Accept</button>
+                                <button class="btn btn-danger btn-sm" onclick="denyInv('${escapeHtml(r)}')">Deny</button>
+                            </div>
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--nord-muted);margin-top:0.4rem;margin-bottom:0.2rem;">Grant permissions to sender:</div>
+                        <div class="permissions inv-accept-perms" data-inv-email="${escapeHtml(r)}">
+                            <label class="perm-toggle" data-perm="incoming" onclick="this.classList.toggle('active')">Incoming Traffic</label>
+                            <label class="perm-toggle" data-perm="routing" onclick="this.classList.toggle('active')">Traffic Routing</label>
+                            <label class="perm-toggle" data-perm="local" onclick="this.classList.toggle('active')">Local Network</label>
+                            <label class="perm-toggle" data-perm="fileshare" onclick="this.classList.toggle('active')">File Sharing</label>
                         </div>
                     </div>
                 `).join('');
@@ -905,8 +915,17 @@
         }
 
         async function acceptInv(email) {
+            const perms = {};
+            for (const c of document.querySelectorAll('.inv-accept-perms')) {
+                if (c.dataset.invEmail === email) {
+                    c.querySelectorAll('.perm-toggle.active').forEach(el => {
+                        perms[el.dataset.perm] = true;
+                    });
+                    break;
+                }
+            }
             showLoading('Accepting invitation...');
-            const r = await api('/api/invitations/accept', 'POST', { email, permissions: {} });
+            const r = await api('/api/invitations/accept', 'POST', { email, permissions: perms });
             hideLoading();
             toast(r.message, r.success ? 'success' : 'error');
             loadInvitations();

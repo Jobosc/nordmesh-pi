@@ -19,6 +19,11 @@ A lightweight web UI for managing NordVPN Meshnet on a Raspberry Pi. Run it on t
 - **Home Assistant compatible** -- Embeddable via iframe (Webpage card)
 - **Responsive dark UI** -- Works on desktop and mobile browsers
 
+## Prerequisites
+
+- [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed on your laptop — used to flash the SD card
+- [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/) image downloaded and flashed onto the SD card using Raspberry Pi Imager
+
 ## Requirements
 
 - Raspberry Pi (or any Linux machine) with internet access
