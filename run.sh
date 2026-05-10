@@ -15,5 +15,7 @@ echo "Syncing dependencies..."
 uv sync
 
 # Run the app
-echo "Starting NordVPN Meshnet Manager on http://127.0.0.1:5000"
-uv run python app.py
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-5000}"
+echo "Starting NordVPN Meshnet Manager on http://${HOST}:${PORT}"
+HOST="${HOST}" PORT="${PORT}" uv run python app.py

@@ -15,5 +15,7 @@ echo "Syncing dependencies..."
 uv sync
 
 # Run with gunicorn for production
-echo "Starting NordVPN Meshnet Manager (production) on http://127.0.0.1:5000"
-uv run gunicorn -w 2 -b 127.0.0.1:5000 app:app
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-5000}"
+echo "Starting NordVPN Meshnet Manager (production) on http://${HOST}:${PORT}"
+uv run gunicorn -w 2 -b "${HOST}:${PORT}" app:app
