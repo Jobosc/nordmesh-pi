@@ -69,11 +69,13 @@ else
 fi
 
 # Add app user to the nordvpn group (required to run nordvpn CLI)
+GROUP_ADDED=false
 if groups "$APP_USER" | grep -qw nordvpn; then
     info "$APP_USER is already in the nordvpn group"
 else
     usermod -aG nordvpn "$APP_USER"
-    warn "$APP_USER added to the nordvpn group — a re-login (or reboot) is required for this to take effect"
+    GROUP_ADDED=true
+    info "$APP_USER added to the nordvpn group"
 fi
 
 # ---------------------------------------------------------------------------
@@ -165,8 +167,14 @@ echo "  Web UI   : http://${PI_IP}"
 echo "  App logs : journalctl -fu ${SERVICE_NAME}"
 echo "  Caddy    : journalctl -fu caddy"
 echo ""
-if groups "$APP_USER" | grep -qw nordvpn; then
-    : # group already active
-else
-    warn "Remember to log out and back in (or reboot) for the nordvpn group to take effect before logging in via the UI."
+if $GROUP_ADDED; then
+    echo -e "${YELLOW}${BOLD}  A reboot is required!${NC}"
+    echo "  '$APP_USER' was added to the 'nordvpn' group, but the current"
+    echo "  session won't see this until after a reboot. Without it, running"
+    echo "  'nordvpn' in the terminal will tell you to run groupadd/usermod."
+    echo ""
+    read -rp "  Reboot now? [y/N] " _REBOOT
+    if [[ "${_REBOOT,,}" == "y" ]]; then
+        reboot
+    fi
 fi
