@@ -61,15 +61,46 @@ def get_status() -> dict:
 
 
 def login() -> tuple[bool, str]:
-    """Initiate login. Returns a URL the user must open in a browser."""
-    code, out, err = _run(["nordvpn", "login"], timeout=15)
-    combined = out + "\n" + err
-    url_match = re.search(r'https://[^\s]+', combined)
-    if url_match:
-        return True, url_match.group(0)
-    if "already logged in" in combined.lower():
+    """Initiate login. Returns a URL the user must open in a browser.
+
+    nordvpn login has two quirks this function handles:
+    1. On first run it may ask whether analytics data can be collected —
+       we answer "n" via stdin so the prompt doesn't block us.
+    2. After printing the login URL it blocks waiting for browser auth,
+       so we kill it after 15 s and drain the pipe to recover the URL.
+    """
+    try:
+        proc = subprocess.Popen(
+            ["nordvpn", "login"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr so URL is captured regardless of stream
+            text=True,
+        )
+    except FileNotFoundError:
+        return False, "Command not found: nordvpn"
+
+    try:
+        # "n\n" declines the data-collection prompt on first run.
+        # If no prompt appears the input is discarded harmlessly.
+        stdout, _ = proc.communicate(input="n\n", timeout=15)
+    except subprocess.TimeoutExpired:
+        # nordvpn printed the URL then blocked waiting for browser auth — kill
+        # it and drain whatever it wrote so we can extract the URL.
+        proc.kill()
+        stdout, _ = proc.communicate()
+
+    # Prefer a URL that follows browser/login context keywords (the real auth URL).
+    # NordVPN also prints policy URLs before the login URL, so we skip those.
+    login_match = re.search(r'(?:browser|open|link)[^\n]*?(https://[^\s]+)', stdout, re.IGNORECASE)
+    if login_match:
+        return True, login_match.group(1)
+    for m in re.finditer(r'https://[^\s]+', stdout):
+        if not any(x in m.group(0) for x in ('privacy', 'terms', 'legal')):
+            return True, m.group(0)
+    if "already logged in" in stdout.lower():
         return True, "Already logged in."
-    return False, combined
+    return False, stdout.strip() or "Login failed: no URL received."
 
 
 def login_with_token(token: str) -> tuple[bool, str]:
