@@ -121,6 +121,17 @@ def api_deny_invitation():
     return jsonify({"success": ok, "message": msg})
 
 
+@app.route("/api/version")
+def api_version():
+    return jsonify(nordvpn.check_update())
+
+
+@app.route("/api/update", methods=["POST"])
+def api_update():
+    ok, msg = nordvpn.perform_update()
+    return jsonify({"success": ok, "message": msg})
+
+
 if __name__ == "__main__":
     import os
     host = os.environ.get("HOST", "127.0.0.1")

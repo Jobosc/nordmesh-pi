@@ -351,6 +351,78 @@ def deny_invitation(email: str) -> tuple[bool, str]:
     return code == 0, out or err
 
 
+# --- Update management ---
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse 'v1.2.3' or '1.2.3' into (1, 2, 3) for comparison."""
+    parts = re.split(r'[.\-]', v.strip().lstrip('v'))
+    try:
+        return tuple(int(x) for x in parts if x.isdigit())
+    except Exception:
+        return (0,)
+
+
+def get_current_version() -> str:
+    """Return the current version from the nearest git tag."""
+    code, out, _ = _run(["git", "describe", "--tags", "--abbrev=0"])
+    return out.strip() if code == 0 else "unknown"
+
+
+def get_latest_version() -> str:
+    """Return the highest version tag found on the git remote."""
+    code, out, _ = _run(["git", "ls-remote", "--tags", "origin"], timeout=10)
+    if code != 0 or not out:
+        return ""
+    tags = []
+    for line in out.splitlines():
+        parts = line.split('\t')
+        if len(parts) == 2:
+            ref = parts[1].strip()
+            if ref.endswith('^{}'):   # skip annotated tag derefs
+                continue
+            tag = ref.replace('refs/tags/', '')
+            if tag:
+                tags.append(tag)
+    if not tags:
+        return ""
+    tags.sort(key=_parse_version, reverse=True)
+    return tags[0]
+
+
+def check_update() -> dict:
+    """Return current version, latest version, and whether an update is available."""
+    current = get_current_version()
+    latest = get_latest_version()
+    update_available = (
+        current not in ("", "unknown")
+        and bool(latest)
+        and _parse_version(latest) > _parse_version(current)
+    )
+    return {"current": current, "latest": latest, "update_available": update_available}
+
+
+def perform_update() -> tuple[bool, str]:
+    """Pull latest code, sync deps, then restart the service."""
+    import os, threading
+
+    code, out, err = _run(["git", "pull"], timeout=60)
+    if code != 0:
+        return False, f"git pull failed: {err or out}"
+
+    uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+    code, out, err = _run([uv, "sync"], timeout=120)
+    if code != 0:
+        return False, f"uv sync failed: {err or out}"
+
+    def _restart():
+        import time
+        time.sleep(2)
+        _run(["sudo", "systemctl", "restart", "nordvpn-meshnet"], timeout=15)
+
+    threading.Thread(target=_restart, daemon=True).start()
+    return True, "Update applied. Service restarting..."
+
+
 def set_nickname(peer: str, nickname: str) -> tuple[bool, str]:
     """Set or remove a nickname for a peer."""
     if nickname:

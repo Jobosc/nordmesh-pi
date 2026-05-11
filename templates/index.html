@@ -385,6 +385,42 @@
             font-size: 0.9rem;
         }
 
+        /* Update button */
+        .btn-update {
+            background: var(--nord-orange);
+            font-size: 0.85rem;
+            padding: 0.45rem 1rem;
+            animation: pulse-update 2.5s ease-in-out infinite;
+        }
+        .btn-update:hover { background: #e65100; animation: none; }
+        @keyframes pulse-update {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,167,38,0.5); }
+            50%       { box-shadow: 0 0 0 6px rgba(255,167,38,0); }
+        }
+
+        /* Progress bar */
+        .progress-track {
+            width: 280px;
+            height: 6px;
+            background: var(--nord-border);
+            border-radius: 3px;
+            margin: 1rem auto 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--nord-blue);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.6s ease;
+        }
+        .progress-label {
+            font-size: 0.78rem;
+            color: var(--nord-muted);
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
         /* Invite form inline */
         .invite-form {
             display: flex;
