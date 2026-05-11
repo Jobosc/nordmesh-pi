@@ -18,26 +18,32 @@ def _mock_login_proc(stdout_data: bytes, returncode: int | None):
 
 
 # ---------------------------------------------------------------------------
-# login — legacy _run-based tests (kept for backwards compatibility)
+# login — URL in various output positions
 # ---------------------------------------------------------------------------
 
 class TestLoginLegacy:
-    def test_returns_url(self):
+    def test_returns_url_in_stdout(self):
         url = "https://api.nordvpn.com/v1/users/oauth/login-redirect?attempt=abc"
-        with patch("nordvpn._run", return_value=(0, f"Open this URL: {url}", "")):
+        proc, data = _mock_login_proc(f"Open this URL: {url}".encode(), returncode=None)
+        with patch("subprocess.Popen", return_value=proc), \
+             patch("select.select", return_value=([proc.stdout], [], [])), \
+             patch("os.read", side_effect=[data, b""]):
             ok, msg = nordvpn.login()
         assert ok is True
         assert msg == url
 
-    def test_url_in_stderr(self):
+    def test_returns_url_after_visit_prefix(self):
         url = "https://api.nordvpn.com/v1/users/oauth/login-redirect?attempt=xyz"
-        with patch("nordvpn._run", return_value=(1, "", f"Visit: {url}")):
+        proc, data = _mock_login_proc(f"Visit: {url}".encode(), returncode=None)
+        with patch("subprocess.Popen", return_value=proc), \
+             patch("select.select", return_value=([proc.stdout], [], [])), \
+             patch("os.read", side_effect=[data, b""]):
             ok, msg = nordvpn.login()
         assert ok is True
         assert msg == url
 
     def test_no_url_failure(self):
-        with patch("nordvpn._run", return_value=(1, "some error", "")):
+        with patch("subprocess.Popen", side_effect=FileNotFoundError):
             ok, msg = nordvpn.login()
         assert ok is False
 

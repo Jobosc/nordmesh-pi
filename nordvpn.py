@@ -309,13 +309,10 @@ def _parse_peer_list(raw: str) -> list[dict]:
 
         # "Hostname:" starts a new peer
         if key_norm == "hostname":
+            saved_pending = dict(pending)
             _flush()
             current = {"hostname": val, "status": "unknown", "is_local": section in ("self", "local"), "is_self": section == "self", "permissions": {}}
-            # Apply any buffered fields (e.g. Nickname that appeared first)
-            if pending:
-                for pk, pv in pending.items():
-                    current[pk] = pv
-                pending = {}
+            current.update(saved_pending)
             continue
 
         # If we have no current peer yet, buffer the field until Hostname appears
@@ -454,7 +451,8 @@ def _parse_version(v: str) -> tuple[int, ...]:
     """Parse 'v1.2.3' or '1.2.3' into (1, 2, 3) for comparison."""
     parts = re.split(r'[.\-]', v.strip().lstrip('v'))
     try:
-        return tuple(int(x) for x in parts if x.isdigit())
+        result = tuple(int(x) for x in parts if x.isdigit())
+        return result if result else (0,)
     except Exception:
         return (0,)
 
