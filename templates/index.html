@@ -969,7 +969,9 @@
             const perms = peer.permissions || {};
             const hostname = escapeHtml(peer.hostname || 'Unknown');
             const nickname = peer.nickname ? escapeHtml(peer.nickname) : '';
-            const displayName = nickname || hostname;
+            const displayName = nickname
+                ? `${nickname} <span style="font-size:0.75rem;font-weight:400;color:var(--nord-muted);">(${hostname})</span>`
+                : hostname;
             const permHtml = permKeys.map(pk => {
                 const active = perms[pk.key] ? 'active' : '';
                 const cliPerm = pk.cli || pk.key;
@@ -996,7 +998,6 @@
                             <button class="btn btn-outline btn-sm" onclick="cancelEditNickname('${hostname}')">Cancel</button>
                         </div>
                     </div>
-                    ${nickname ? `<div class="peer-meta"><span>${hostname}</span></div>` : ''}
                     <div class="peer-meta">
                         <span>Status: ${escapeHtml(peer.status)}</span>
                         ${peer.ip ? `<span>IP: ${escapeHtml(peer.ip)}</span>` : ''}
