@@ -32,12 +32,23 @@ def api_install():
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    token = request.json.get("token") if request.is_json else None
+    data = request.json or {}
+    token = data.get("token")
     if token:
         ok, msg = nordvpn.login_with_token(token)
-    else:
-        ok, msg = nordvpn.login()
-    return jsonify({"success": ok, "message": msg})
+        return jsonify({"success": ok, "message": msg})
+
+    analytics_consent = data.get("analytics_consent")  # "y", "n", or None
+    ok, msg = nordvpn.login(analytics_consent=analytics_consent)
+
+    if not ok and msg.startswith("CONSENT_REQUIRED:"):
+        prompt_text = msg[len("CONSENT_REQUIRED:"):]
+        return jsonify({"success": False, "needs_consent": True, "consent_prompt": prompt_text})
+
+    response = {"success": ok, "message": msg}
+    if ok and msg.startswith("http"):
+        response["url"] = msg
+    return jsonify(response)
 
 
 @app.route("/api/logout", methods=["POST"])

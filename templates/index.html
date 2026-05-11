@@ -385,6 +385,42 @@
             font-size: 0.9rem;
         }
 
+        /* Consent modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal-box {
+            background: var(--nord-card);
+            border: 1px solid var(--nord-border);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 480px;
+            width: 100%;
+        }
+        .modal-box h3 { margin-bottom: 0.75rem; font-size: 1.1rem; }
+        .modal-box pre {
+            background: var(--nord-darker);
+            border: 1px solid var(--nord-border);
+            border-radius: 6px;
+            padding: 1rem;
+            font-size: 0.82rem;
+            color: var(--nord-muted);
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0.75rem 0 1.25rem;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .modal-actions { display: flex; gap: 0.75rem; }
+
         /* Update button */
         .btn-update {
             background: var(--nord-orange);
@@ -607,6 +643,19 @@
         </div>
     </div>
 
+    <!-- Analytics consent modal -->
+    <div class="modal-overlay" id="consentModal">
+        <div class="modal-box">
+            <h3>NordVPN Data Collection</h3>
+            <p style="color:var(--nord-muted); font-size:0.88rem;">NordVPN is asking whether it may collect limited anonymous usage data:</p>
+            <pre id="consentPromptText"></pre>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="respondConsent('y')">Accept</button>
+                <button class="btn btn-outline" onclick="respondConsent('n')">Decline</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-box">
@@ -726,16 +775,45 @@
             if (r.success) checkStatus();
         }
 
+        function showLoginUrl(url) {
+            document.getElementById('loginUrl').style.display = '';
+            const link = document.getElementById('loginUrlLink');
+            link.href = url;
+            link.textContent = url;
+            const opened = window.open(url, '_blank');
+            if (opened) {
+                toast('Login page opened in a new tab. Complete login there.', 'info');
+            } else {
+                toast('Could not open browser automatically. Use the URL below.', 'info');
+            }
+        }
+
         async function loginBrowser() {
             showLoading('Requesting login URL...');
             const r = await api('/api/login', 'POST');
             hideLoading();
-            if (r.success && r.message.startsWith('http')) {
-                document.getElementById('loginUrl').style.display = '';
-                const link = document.getElementById('loginUrlLink');
-                link.href = r.message;
-                link.textContent = r.message;
-                toast('Open the URL to complete login.', 'info');
+            if (r.needs_consent) {
+                document.getElementById('consentPromptText').textContent = r.consent_prompt;
+                document.getElementById('consentModal').classList.add('visible');
+                return;
+            }
+            const url = r.url || r.message;
+            if (r.success && url.startsWith('http')) {
+                showLoginUrl(url);
+            } else {
+                toast(r.message, r.success ? 'success' : 'error');
+                if (r.success) checkStatus();
+            }
+        }
+
+        async function respondConsent(choice) {
+            document.getElementById('consentModal').classList.remove('visible');
+            showLoading('Requesting login URL...');
+            const r = await api('/api/login', 'POST', { analytics_consent: choice });
+            hideLoading();
+            const url = r.url || r.message;
+            if (r.success && url.startsWith('http')) {
+                showLoginUrl(url);
             } else {
                 toast(r.message, r.success ? 'success' : 'error');
                 if (r.success) checkStatus();

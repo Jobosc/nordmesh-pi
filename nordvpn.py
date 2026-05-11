@@ -3,6 +3,9 @@
 import subprocess
 import shutil
 import re
+import os
+import select
+import time
 
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
@@ -60,38 +63,14 @@ def get_status() -> dict:
     return info
 
 
-def login() -> tuple[bool, str]:
-    """Initiate login. Returns a URL the user must open in a browser.
+def _is_consent_prompt(text: str) -> bool:
+    """Return True if text looks like a NordVPN analytics/data-collection prompt."""
+    low = text.lower()
+    return any(k in low for k in ['y/n', 'yes/no', 'analytics', 'anonymous', 'statistics', 'data collection', 'help us improve', 'share data'])
 
-    nordvpn login has two quirks this function handles:
-    1. On first run it may ask whether analytics data can be collected —
-       we answer "n" via stdin so the prompt doesn't block us.
-    2. After printing the login URL it blocks waiting for browser auth,
-       so we kill it after 15 s and drain the pipe to recover the URL.
-    """
-    try:
-        proc = subprocess.Popen(
-            ["nordvpn", "login"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # merge stderr so URL is captured regardless of stream
-            text=True,
-        )
-    except FileNotFoundError:
-        return False, "Command not found: nordvpn"
 
-    try:
-        # "n\n" declines the data-collection prompt on first run.
-        # If no prompt appears the input is discarded harmlessly.
-        stdout, _ = proc.communicate(input="n\n", timeout=15)
-    except subprocess.TimeoutExpired:
-        # nordvpn printed the URL then blocked waiting for browser auth — kill
-        # it and drain whatever it wrote so we can extract the URL.
-        proc.kill()
-        stdout, _ = proc.communicate()
-
-    # Prefer a URL that follows browser/login context keywords (the real auth URL).
-    # NordVPN also prints policy URLs before the login URL, so we skip those.
+def _extract_login_url(stdout: str) -> tuple[bool, str]:
+    """Extract the auth URL from nordvpn login output."""
     login_match = re.search(r'(?:browser|open|link)[^\n]*?(https://[^\s]+)', stdout, re.IGNORECASE)
     if login_match:
         return True, login_match.group(1)
@@ -101,6 +80,94 @@ def login() -> tuple[bool, str]:
     if "already logged in" in stdout.lower():
         return True, "Already logged in."
     return False, stdout.strip() or "Login failed: no URL received."
+
+
+def _login_with_input(input_text: str) -> tuple[bool, str]:
+    """Run nordvpn login, send input_text to stdin, return (success, url_or_error)."""
+    try:
+        proc = subprocess.Popen(
+            ["nordvpn", "login"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except FileNotFoundError:
+        return False, "Command not found: nordvpn"
+
+    try:
+        stdout, _ = proc.communicate(input=input_text, timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, _ = proc.communicate()
+
+    return _extract_login_url(stdout)
+
+
+def login(analytics_consent: str | None = None) -> tuple[bool, str]:
+    """Initiate login. Returns a URL the user must open in a browser.
+
+    On first run NordVPN may ask whether analytics data can be collected.
+    When analytics_consent is None this function detects that prompt and
+    returns (False, "CONSENT_REQUIRED:<prompt text>") so the caller can
+    surface the question to the user.  Pass analytics_consent="y" or "n"
+    on the follow-up call to answer the prompt and proceed to get the URL.
+
+    After printing the login URL nordvpn blocks waiting for browser auth,
+    so we kill it after 15 s and drain the pipe to recover the URL.
+    """
+    # If caller already has a consent answer, just run with it directly.
+    if analytics_consent is not None:
+        return _login_with_input(analytics_consent + "\n")
+
+    # Detection run: read initial output to check for a consent prompt.
+    try:
+        proc = subprocess.Popen(
+            ["nordvpn", "login"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+        )
+    except FileNotFoundError:
+        return False, "Command not found: nordvpn"
+
+    initial_output = ""
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        try:
+            ready, _, _ = select.select([proc.stdout], [], [], min(remaining, 0.2))
+        except (ValueError, OSError):
+            break
+        if ready:
+            chunk = os.read(proc.stdout.fileno(), 4096)
+            if chunk:
+                initial_output += chunk.decode("utf-8", errors="replace")
+            else:
+                break
+        if _is_consent_prompt(initial_output) or re.search(r'https://[^\s]+', initial_output):
+            break
+
+    if _is_consent_prompt(initial_output):
+        proc.kill()
+        proc.communicate()
+        return False, "CONSENT_REQUIRED:" + initial_output.strip()
+
+    # No consent prompt — collect remaining output (nordvpn will block after printing URL).
+    try:
+        proc.stdin.close()
+    except OSError:
+        pass
+    try:
+        remaining_bytes, _ = proc.communicate(timeout=12)
+        remaining_text = remaining_bytes.decode("utf-8", errors="replace") if isinstance(remaining_bytes, bytes) else (remaining_bytes or "")
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        remaining_bytes, _ = proc.communicate()
+        remaining_text = remaining_bytes.decode("utf-8", errors="replace") if isinstance(remaining_bytes, bytes) else ""
+
+    return _extract_login_url(initial_output + remaining_text)
 
 
 def login_with_token(token: str) -> tuple[bool, str]:
