@@ -1,7 +1,10 @@
 """Flask web application for NordVPN Meshnet management."""
 
+import logging
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import nordvpn
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = Flask(__name__)
 
@@ -32,18 +35,20 @@ def api_install():
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    data = request.json or {}
+    data = request.get_json(force=True, silent=True) or {}
     token = data.get("token")
     if token:
         ok, msg = nordvpn.login_with_token(token)
         return jsonify({"success": ok, "message": msg})
 
-    analytics_consent = data.get("analytics_consent")  # "y", "n", or None
-    ok, msg = nordvpn.login(analytics_consent=analytics_consent)
+    user_input = data.get("user_input")  # answer typed by user in the terminal panel
+    ok, msg = nordvpn.login(user_input=user_input)
 
-    if not ok and msg.startswith("CONSENT_REQUIRED:"):
-        prompt_text = msg[len("CONSENT_REQUIRED:"):]
-        return jsonify({"success": False, "needs_consent": True, "consent_prompt": prompt_text})
+    import logging as _log
+    _log.getLogger(__name__).info("api_login: ok=%s needs_input=%s msg_prefix=%r", ok, msg.startswith("NEEDS_INPUT:"), msg[:80])
+
+    if not ok and msg.startswith("NEEDS_INPUT:"):
+        return jsonify({"success": False, "needs_input": True, "prompt": msg[len("NEEDS_INPUT:"):]})
 
     response = {"success": ok, "message": msg}
     if ok and msg.startswith("http"):
