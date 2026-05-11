@@ -399,6 +399,63 @@
             overflow-y: auto;
         }
 
+        /* Logo menu */
+        .logo-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 8px;
+            color: var(--nord-text);
+            transition: background 0.15s;
+        }
+        .logo-btn:hover { background: rgba(255,255,255,0.06); }
+
+        .logo-menu-wrapper {
+            position: relative;
+        }
+
+        .logo-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            background: var(--nord-card);
+            border: 1px solid var(--nord-border);
+            border-radius: 10px;
+            min-width: 220px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 500;
+            overflow: hidden;
+        }
+        .logo-dropdown.open { display: block; }
+
+        .logo-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            width: 100%;
+            background: none;
+            border: none;
+            color: var(--nord-text);
+            font-size: 0.9rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.15s;
+        }
+        .logo-dropdown-item:hover { background: rgba(255,255,255,0.06); }
+        .logo-dropdown-item svg { flex-shrink: 0; opacity: 0.7; }
+        .logo-dropdown-item .item-sub {
+            font-size: 0.75rem;
+            color: var(--nord-muted);
+            display: block;
+            margin-top: 1px;
+        }
+
         /* Update button */
         .btn-update {
             background: var(--nord-orange);
@@ -461,13 +518,24 @@
 </head>
 <body>
     <header>
-        <div class="logo">
-            <svg viewBox="0 0 36 36" fill="none">
-                <rect width="36" height="36" rx="8" fill="#4687ff"/>
-                <path d="M18 8L10 14v8l8 6 8-6v-8l-8-6zm0 3l5 3.75v5.5L18 24l-5-3.75v-5.5L18 11z" fill="white"/>
-                <circle cx="18" cy="18" r="3" fill="white"/>
-            </svg>
-            <h1>Meshnet <span>Manager</span></h1>
+        <div class="logo-menu-wrapper">
+            <button class="logo-btn" onclick="toggleLogoMenu()" id="logoBtn" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 36 36" fill="none" width="36" height="36">
+                    <rect width="36" height="36" rx="8" fill="#4687ff"/>
+                    <path d="M18 8L10 14v8l8 6 8-6v-8l-8-6zm0 3l5 3.75v5.5L18 24l-5-3.75v-5.5L18 11z" fill="white"/>
+                    <circle cx="18" cy="18" r="3" fill="white"/>
+                </svg>
+                <h1 style="font-size:1.3rem; font-weight:600; margin:0;">Meshnet <span style="color:var(--nord-blue);">Manager</span></h1>
+            </button>
+            <div class="logo-dropdown" id="logoDropdown">
+                <button class="logo-dropdown-item" onclick="checkForUpdates()">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 1v9M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>Check for updates<span class="item-sub" id="menuVersionSub"></span></span>
+                </button>
+            </div>
         </div>
         <div class="status-bar" id="statusBar">
             <div class="status-item">
@@ -727,6 +795,15 @@
             }
 
             updateStatusBar(status);
+            const btn = document.getElementById('logoBtn');
+            if (status.logged_in) {
+                btn.style.pointerEvents = '';
+                btn.title = '';
+            } else {
+                btn.style.pointerEvents = 'none';
+                document.getElementById('logoDropdown').classList.remove('open');
+            }
+
             if (!status.installed) {
                 showView('viewInstall');
             } else if (!status.logged_in) {
@@ -758,6 +835,8 @@
             if (r.success) checkStatus();
         }
 
+        let _loginPollTimer = null;
+
         function showLoginUrl(url) {
             document.getElementById('loginUrl').style.display = '';
             const link = document.getElementById('loginUrlLink');
@@ -767,13 +846,33 @@
             if (!opened) {
                 toast('Could not open browser automatically. Use the URL below.', 'info');
             }
+            startLoginPoll();
+        }
+
+        function startLoginPoll() {
+            stopLoginPoll();
+            let attempts = 0;
+            const MAX = 60; // 2 minutes at 2s intervals
+            _loginPollTimer = setInterval(async () => {
+                attempts++;
+                if (attempts > MAX) { stopLoginPoll(); return; }
+                try {
+                    const s = await api('/api/status');
+                    if (s.logged_in) {
+                        stopLoginPoll();
+                        checkStatus();
+                    }
+                } catch (_) {}
+            }, 2000);
+        }
+
+        function stopLoginPoll() {
+            if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
         }
 
         function showLoginTerminal(prompt) {
             document.getElementById('loginTerminal').style.display = '';
             document.getElementById('loginTerminalOutput').textContent = prompt;
-            document.getElementById('loginTerminalInput').value = '';
-            document.getElementById('loginTerminalInput').focus();
         }
 
         function hideLoginTerminal() {
@@ -781,6 +880,7 @@
         }
 
         async function loginBrowser() {
+            stopLoginPoll();
             hideLoginTerminal();
             document.getElementById('loginUrl').style.display = 'none';
             const r = await api('/api/login', 'POST');
@@ -853,7 +953,7 @@
             }
 
             if (!externalPeers.length) {
-                externalContainer.innerHTML = '<div class="empty">No external devices. Send an invitation to get started.</div>';
+                externalContainer.innerHTML = '<div class="empty">No peers found.</div>';
             } else {
                 externalContainer.innerHTML = externalPeers.map(p => renderPeer(p)).join('');
             }
@@ -1055,6 +1155,55 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        }
+
+        // --- Logo dropdown menu ---
+        function toggleLogoMenu() {
+            const dropdown = document.getElementById('logoDropdown');
+            const btn = document.getElementById('logoBtn');
+            const isOpen = dropdown.classList.contains('open');
+            dropdown.classList.toggle('open');
+            btn.setAttribute('aria-expanded', String(!isOpen));
+        }
+
+        document.addEventListener('click', function(e) {
+            const wrapper = document.querySelector('.logo-menu-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('logoDropdown').classList.remove('open');
+                document.getElementById('logoBtn').setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        async function checkForUpdates() {
+            document.getElementById('logoDropdown').classList.remove('open');
+            document.getElementById('logoBtn').setAttribute('aria-expanded', 'false');
+
+            const sub = document.getElementById('menuVersionSub');
+            sub.textContent = 'Checking…';
+
+            let r;
+            try {
+                r = await api('/api/version');
+            } catch (err) {
+                sub.textContent = '';
+                toast('Could not check for updates.', 'error');
+                return;
+            }
+
+            if (r.update_available) {
+                sub.textContent = `v${r.latest} available`;
+                if (confirm(`Version ${r.latest} is available (current: ${r.current || 'unknown'}).\n\nUpdate now?`)) {
+                    showLoading('Updating NordVPN… This may take a moment.');
+                    const u = await api('/api/update', 'POST');
+                    hideLoading();
+                    sub.textContent = u.success ? `v${r.latest}` : sub.textContent;
+                    toast(u.message, u.success ? 'success' : 'error');
+                }
+            } else {
+                const label = r.current ? `v${r.current} — up to date` : 'Up to date';
+                sub.textContent = label;
+                toast('Already on the latest version.', 'info');
+            }
         }
 
         // --- Init ---
