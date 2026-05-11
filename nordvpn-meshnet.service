@@ -9,7 +9,7 @@ User=pi
 WorkingDirectory=/home/pi/nordvpn-meshnet
 Environment=PORT=5000
 Environment=HOST=0.0.0.0
-ExecStart=/home/pi/nordvpn-meshnet/run_production.sh
+ExecStart=/home/pi/nordvpn-meshnet/run.sh
 Restart=on-failure
 RestartSec=5
 

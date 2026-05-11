@@ -49,17 +49,17 @@ For remote access from other devices on your network, set up Caddy as a reverse 
 ```bash
 git clone https://github.com/Jobosc/nordmesh-pi.git
 cd nordmesh-pi
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 The container runs on port `5000` by default. NordVPN login state is persisted in a named volume (`nordvpn-data`) so it survives container restarts.
 
-Requires `NET_ADMIN` / `NET_RAW` capabilities and `/dev/net/tun` — already configured in `docker-compose.yml`.
+Requires `NET_ADMIN` / `NET_RAW` capabilities and `/dev/net/tun` — already configured in `docker/docker-compose.yml`.
 
 To change the port:
 
 ```bash
-PORT=8080 docker compose up -d
+PORT=8080 docker compose -f docker/docker-compose.yml up -d
 ```
 
 ## Login Methods
@@ -71,10 +71,10 @@ PORT=8080 docker compose up -d
 
 ## Production (native)
 
-For a long-running native setup, use Gunicorn instead of the Flask dev server:
+For a long-running native setup, run:
 
 ```bash
-./run_production.sh
+./run.sh
 ```
 
 This starts 2 Gunicorn workers bound to `0.0.0.0:5000`. The Docker setup always uses Gunicorn.
@@ -90,7 +90,7 @@ After=network.target
 [Service]
 Environment="PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin"
 WorkingDirectory=/home/pi/nordmesh-pi
-ExecStart=/home/pi/nordmesh-pi/run_production.sh
+ExecStart=/home/pi/nordmesh-pi/run.sh
 User=pi
 Restart=on-failure
 
@@ -118,20 +118,22 @@ sudo usermod -aG nordvpn $USER
 
 ```
 nordmesh-pi/
-├── app.py                    # Flask routes — thin layer delegating to nordvpn.py
-├── nordvpn.py                # nordvpn CLI wrapper (all subprocess calls live here)
+├── src/
+│   ├── app.py                # Flask routes — thin layer delegating to nordvpn.py
+│   └── nordvpn.py            # nordvpn CLI wrapper (all subprocess calls live here)
 ├── templates/
 │   └── index.html            # Single-page UI (HTML + inline CSS + JS)
-├── Dockerfile                # Container image (debian:bookworm-slim + NordVPN via apt)
-├── docker-compose.yml        # Compose config with capabilities and persistent volume
-├── docker-entrypoint.sh      # Starts nordvpnd, waits for it, then runs Gunicorn
+├── docker/
+│   ├── Dockerfile            # Container image (debian:bookworm-slim + NordVPN via apt)
+│   ├── docker-compose.yml    # Compose config with capabilities and persistent volume
+│   └── docker-entrypoint.sh  # Starts nordvpnd, waits for it, then runs Gunicorn
+├── tests/                    # pytest test suite
+├── .dockerignore             # Build context exclusions (stays at project root)
 ├── nordvpn-meshnet.service   # Systemd unit file for native installs
 ├── pyproject.toml            # Dependencies (Flask, Gunicorn) managed by uv
-├── run.sh                    # Dev startup script (installs uv if needed)
-├── run_production.sh         # Production startup with Gunicorn
+├── run.sh                    # Startup script (installs uv if needed, runs Gunicorn)
 ├── setup.sh                  # One-shot Raspberry Pi setup script
-├── teardown.sh               # Reverses the setup
-└── tests/                    # pytest test suite
+└── teardown.sh               # Reverses the setup
 ```
 
 ## API Endpoints

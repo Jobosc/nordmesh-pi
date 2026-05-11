@@ -132,7 +132,7 @@ User=${APP_USER}
 WorkingDirectory=${APP_DIR}
 Environment=HOST=127.0.0.1
 Environment=PORT=${APP_PORT}
-ExecStart=${APP_DIR}/run_production.sh
+ExecStart=${APP_DIR}/run.sh
 Restart=on-failure
 RestartSec=5
 

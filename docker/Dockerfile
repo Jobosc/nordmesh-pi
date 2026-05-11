@@ -31,10 +31,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen
 
 # Copy application
-COPY app.py nordvpn.py ./
+COPY src/ src/
 COPY templates/ templates/
 
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5000

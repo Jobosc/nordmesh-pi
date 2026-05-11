@@ -1,6 +1,8 @@
 services:
   nordvpn-meshnet:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: nordvpn-meshnet
     ports:
       - "${PORT:-5000}:${PORT:-5000}"

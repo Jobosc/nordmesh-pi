@@ -23,4 +23,5 @@ exec uv run gunicorn \
     --bind "${HOST:-0.0.0.0}:${PORT:-5000}" \
     --access-logfile - \
     --error-logfile - \
+    --pythonpath src \
     app:app
