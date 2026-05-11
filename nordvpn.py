@@ -6,6 +6,7 @@ import re
 import os
 import select
 import time
+import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -297,7 +298,10 @@ def _parse_peer_list(raw: str) -> list[dict]:
                 continue
 
         # Lines without colon are bare hostnames (fallback format)
+        # Skip bracketed status messages like "[no peers]"
         if ":" not in line:
+            if line.startswith("[") and line.endswith("]"):
+                continue
             _flush()
             current = {"hostname": line, "status": "unknown", "is_local": section in ("self", "local"), "is_self": section == "self", "permissions": {}}
             continue
@@ -498,8 +502,6 @@ def check_update() -> dict:
 
 def perform_update() -> tuple[bool, str]:
     """Pull latest code, sync deps, then restart the service."""
-    import os, threading
-
     code, out, err = _run(["git", "pull"], timeout=60)
     if code != 0:
         return False, f"git pull failed: {err or out}"
@@ -510,7 +512,6 @@ def perform_update() -> tuple[bool, str]:
         return False, f"uv sync failed: {err or out}"
 
     def _restart():
-        import time
         time.sleep(2)
         _run(["sudo", "systemctl", "restart", "nordvpn-meshnet"], timeout=15)
 

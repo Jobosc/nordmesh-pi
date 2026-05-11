@@ -1,65 +1,83 @@
 # NordVPN Meshnet Manager
 
-A lightweight web UI for managing NordVPN Meshnet on a Raspberry Pi. Run it on the Pi and control everything from any browser on your network.
+> **Fully vibecoded.** This project was built entirely with AI assistance using [Claude Code](https://claude.ai/code).
+
+A lightweight web UI for managing NordVPN Meshnet on a Raspberry Pi (or any Linux machine). Run it on the device and control everything from any browser on your network.
 
 ```
-[Your browser] --HTTPS--> [Caddy on Raspberry Pi] --HTTP--> [Flask] --CLI--> [nordvpn]
+[Your browser] ──HTTPS──> [Caddy on Raspberry Pi] ──HTTP──> [Flask] ──CLI──> [nordvpn]
 ```
 
 ## Features
 
-- **Guided setup** -- Installs NordVPN, handles login, and enables Meshnet step by step
-- **Peer management** -- View peers split into "My Devices" and "External Devices", with live permission toggles:
+- **Guided setup** — Installs NordVPN, handles login (token or browser link), and enables Meshnet step by step
+- **Consent prompt handling** — Detects NordVPN's data-collection prompt at first login and displays it inline with Accept/Decline buttons
+- **Peer management** — Peers split into "My Devices" and "External Devices", with live permission toggles per peer:
   - Incoming traffic
   - Traffic routing
   - Local network access
   - File sharing
-- **Nickname editing** -- Set or change nicknames for any peer directly from the UI
-- **Invitations** -- Send invitations with pre-selected permissions, revoke sent ones, accept or deny received ones
-- **Home Assistant compatible** -- Embeddable via iframe (Webpage card)
-- **Responsive dark UI** -- Works on desktop and mobile browsers
-
-## Prerequisites
-
-- [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed on your laptop — used to flash the SD card
-- [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/) image downloaded and flashed onto the SD card using Raspberry Pi Imager
+- **Nicknames** — Set or remove a nickname for any peer; the hostname is shown in smaller text alongside it
+- **Invitations** — Send invitations with pre-selected permissions, revoke sent ones, accept or deny received ones
+- **Update management** — Check for and apply NordVPN updates from the header menu (available after login)
+- **Docker support** — First-class Docker and Docker Compose setup with persistent login state
+- **Home Assistant compatible** — Embeddable via iframe (Webpage card)
+- **Responsive dark UI** — Works on desktop and mobile browsers
 
 ## Requirements
 
-- Raspberry Pi (or any Linux machine) with internet access
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/) (the run script installs it automatically if missing)
-- [NordVPN](https://nordvpn.com/download/linux/) installed and configured (`sh <(curl -sSf https://downloads.nordcdn.com/apps/linux/install.sh)`)
-- NordVPN account (an active subscription is **not** required — Meshnet is free for all NordVPN accounts)
-- [Caddy](https://caddyserver.com/) (optional, for HTTPS access — `sudo apt install caddy`)
+- Raspberry Pi or any Linux machine with internet access
+- Python 3.10+ and [uv](https://docs.astral.sh/uv/) — or Docker
+- NordVPN account (active subscription **not** required — Meshnet is free)
 
 ## Quick Start
 
+### Native (Raspberry Pi / Linux)
+
 ```bash
 git clone https://github.com/Jobosc/nordmesh-pi.git
+cd nordmesh-pi
 ./run.sh
 ```
 
-Then open `http://localhost:5000` in a browser on the Pi. For remote access, set up Caddy as a reverse proxy (see [HTTPS with Caddy](#https-with-caddy)) and open `https://<your-pi-ip>` from any device on your network.
+Open `http://localhost:5000` in a browser. If NordVPN is not yet installed, the UI will offer a one-click install, then guide you through login and enabling Meshnet.
 
-If NordVPN is not yet installed, the UI will offer a one-click install. After that it guides you through login and enabling Meshnet.
+For remote access from other devices on your network, set up Caddy as a reverse proxy (see [HTTPS with Caddy](#https-with-caddy)).
+
+### Docker
+
+```bash
+git clone https://github.com/Jobosc/nordmesh-pi.git
+cd nordmesh-pi
+docker compose up -d
+```
+
+The container runs on port `5000` by default. NordVPN login state is persisted in a named volume (`nordvpn-data`) so it survives container restarts.
+
+Requires `NET_ADMIN` / `NET_RAW` capabilities and `/dev/net/tun` — already configured in `docker-compose.yml`.
+
+To change the port:
+
+```bash
+PORT=8080 docker compose up -d
+```
 
 ## Login Methods
 
 | Method | How |
 |---|---|
-| **Access token** | Generate a token at [my.nordaccount.com](https://my.nordaccount.com) under "Manual Setup", paste it into the UI |
-| **Browser link** | Click "Login via Browser Link", open the returned URL on any device, complete the login there |
+| **Access token** | Generate a token at [my.nordaccount.com](https://my.nordaccount.com) → Manual Setup, paste it into the UI |
+| **Browser link** | Click "Login via Browser Link", open the returned URL on any device, complete the login there — the UI polls for completion and redirects automatically |
 
-## Production
+## Production (native)
 
-For a long-running setup, use Gunicorn instead of the Flask dev server:
+For a long-running native setup, use Gunicorn instead of the Flask dev server:
 
 ```bash
 ./run_production.sh
 ```
 
-This starts 2 Gunicorn workers on localhost port 5000 (not exposed externally — use Caddy for HTTPS access).
+This starts 2 Gunicorn workers bound to `0.0.0.0:5000`. The Docker setup always uses Gunicorn.
 
 ### Running as a systemd service
 
@@ -71,8 +89,8 @@ After=network.target
 
 [Service]
 Environment="PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin"
-WorkingDirectory=/home/pi/nordvpn_meshnet
-ExecStart=/home/pi/nordvpn_meshnet/run_production.sh
+WorkingDirectory=/home/pi/nordmesh-pi
+ExecStart=/home/pi/nordmesh-pi/run_production.sh
 User=pi
 Restart=on-failure
 
@@ -85,32 +103,35 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now meshnet-ui
 ```
 
+A ready-made service file is included at `nordvpn-meshnet.service`.
+
 ## Permissions
 
-The user running the app must be in the `nordvpn` group to execute CLI commands without `sudo`:
+The user running the app must be in the `nordvpn` group:
 
 ```bash
 sudo usermod -aG nordvpn $USER
-# Log out and back in for the group change to take effect
-```
-
-To ensure NordVPN reconnects automatically after a reboot:
-
-```bash
-nordvpn set autoconnect on
+# Log out and back in for the change to take effect
 ```
 
 ## Project Structure
 
 ```
-nordvpn_meshnet/
-├── app.py              # Flask routes and API endpoints
-├── nordvpn.py          # Python wrapper around the nordvpn CLI
+nordmesh-pi/
+├── app.py                    # Flask routes — thin layer delegating to nordvpn.py
+├── nordvpn.py                # nordvpn CLI wrapper (all subprocess calls live here)
 ├── templates/
-│   └── index.html      # Single-page UI
-├── pyproject.toml      # Project config and dependencies
-├── run.sh              # Dev startup script
-└── run_production.sh   # Production startup with Gunicorn
+│   └── index.html            # Single-page UI (HTML + inline CSS + JS)
+├── Dockerfile                # Container image (debian:bookworm-slim + NordVPN via apt)
+├── docker-compose.yml        # Compose config with capabilities and persistent volume
+├── docker-entrypoint.sh      # Starts nordvpnd, waits for it, then runs Gunicorn
+├── nordvpn-meshnet.service   # Systemd unit file for native installs
+├── pyproject.toml            # Dependencies (Flask, Gunicorn) managed by uv
+├── run.sh                    # Dev startup script (installs uv if needed)
+├── run_production.sh         # Production startup with Gunicorn
+├── setup.sh                  # One-shot Raspberry Pi setup script
+├── teardown.sh               # Reverses the setup
+└── tests/                    # pytest test suite
 ```
 
 ## API Endpoints
@@ -118,9 +139,9 @@ nordvpn_meshnet/
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/` | Web UI |
-| GET | `/api/status` | NordVPN install, login, and meshnet status |
+| GET | `/api/status` | Install, login, and Meshnet status |
 | POST | `/api/install` | Install NordVPN |
-| POST | `/api/login` | Login (with optional `token` in body) |
+| POST | `/api/login` | Login — body: `{"token": "…"}` or `{"user_input": "y/n"}` or empty for browser link |
 | POST | `/api/logout` | Logout |
 | POST | `/api/meshnet/enable` | Enable Meshnet |
 | POST | `/api/meshnet/disable` | Disable Meshnet |
@@ -133,10 +154,10 @@ nordvpn_meshnet/
 | POST | `/api/invitations/revoke` | Revoke a sent invitation |
 | POST | `/api/invitations/accept` | Accept a received invitation |
 | POST | `/api/invitations/deny` | Deny a received invitation |
+| GET | `/api/version` | Check current and latest NordVPN version |
+| POST | `/api/update` | Pull latest code and restart |
 
 ## HTTPS with Caddy
-
-To serve the UI over HTTPS, install [Caddy](https://caddyserver.com/) and configure it as a reverse proxy.
 
 1. Install Caddy:
 
@@ -144,7 +165,7 @@ To serve the UI over HTTPS, install [Caddy](https://caddyserver.com/) and config
 sudo apt install caddy
 ```
 
-2. Find your Pi's local IP:
+2. Find your device's local IP:
 
 ```bash
 hostname -I
@@ -159,7 +180,7 @@ https://192.168.1.100 {
 }
 ```
 
-Replace `192.168.1.100` with your Pi's actual IP. The `tls internal` directive generates a self-signed certificate (you'll see a one-time browser warning).
+Replace `192.168.1.100` with your actual IP. `tls internal` generates a self-signed certificate (one-time browser warning). If you have a domain pointing at the device, replace the IP with the domain and drop `tls internal` — Caddy provisions a Let's Encrypt certificate automatically.
 
 4. Restart Caddy:
 
@@ -167,15 +188,13 @@ Replace `192.168.1.100` with your Pi's actual IP. The `tls internal` directive g
 sudo systemctl restart caddy
 ```
 
-The UI is now available at `https://<your-pi-ip>`. If you have a domain pointing to the Pi, replace the IP with your domain in the Caddyfile and remove `tls internal` — Caddy will automatically provision a Let's Encrypt certificate.
-
 ### Home Assistant
 
-To embed the UI in a Home Assistant dashboard, add a **Webpage card** with the URL `https://<your-pi-ip>`.
+Add a **Webpage card** pointing to `https://<your-device-ip>` to embed the UI in a dashboard.
 
-## Security Note
+## Security
 
-This UI has no authentication. Flask binds to localhost only, so direct access is limited to the Pi itself. When using Caddy, anyone who can reach the Pi's HTTPS port can manage your Meshnet. To restrict access:
+This UI has no built-in authentication. To restrict access:
 
-- Add basic auth in the Caddyfile (`basicauth`)
-- Restrict access via firewall rules (`ufw allow from 192.168.1.0/24 to any port 443`)
+- Add basic auth in the Caddyfile: `basicauth { <user> <bcrypt-hash> }`
+- Restrict by IP via firewall: `ufw allow from 192.168.1.0/24 to any port 443`

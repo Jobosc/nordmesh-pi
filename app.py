@@ -1,10 +1,11 @@
 """Flask web application for NordVPN Meshnet management."""
 
 import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify
 import nordvpn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -44,8 +45,7 @@ def api_login():
     user_input = data.get("user_input")  # answer typed by user in the terminal panel
     ok, msg = nordvpn.login(user_input=user_input)
 
-    import logging as _log
-    _log.getLogger(__name__).info("api_login: ok=%s needs_input=%s msg_prefix=%r", ok, msg.startswith("NEEDS_INPUT:"), msg[:80])
+    log.info("api_login: ok=%s needs_input=%s msg_prefix=%r", ok, msg.startswith("NEEDS_INPUT:"), msg[:80])
 
     if not ok and msg.startswith("NEEDS_INPUT:"):
         return jsonify({"success": False, "needs_input": True, "prompt": msg[len("NEEDS_INPUT:"):]})

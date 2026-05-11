@@ -38,23 +38,6 @@
             gap: 1rem;
         }
 
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .logo svg { width: 36px; height: 36px; }
-
-        .logo h1 {
-            font-size: 1.3rem;
-            font-weight: 600;
-        }
-
-        .logo span {
-            color: var(--nord-blue);
-        }
-
         .status-bar {
             display: flex;
             gap: 1.5rem;
@@ -414,6 +397,24 @@
         }
         .logo-btn:hover { background: rgba(255,255,255,0.06); }
 
+        .logo-icon-wrap {
+            position: relative;
+            display: inline-flex;
+            flex-shrink: 0;
+        }
+
+        .update-dot {
+            display: none;
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            width: 10px;
+            height: 10px;
+            background: var(--nord-green);
+            border-radius: 50%;
+            border: 2px solid var(--nord-dark);
+        }
+
         .logo-menu-wrapper {
             position: relative;
         }
@@ -456,42 +457,6 @@
             margin-top: 1px;
         }
 
-        /* Update button */
-        .btn-update {
-            background: var(--nord-orange);
-            font-size: 0.85rem;
-            padding: 0.45rem 1rem;
-            animation: pulse-update 2.5s ease-in-out infinite;
-        }
-        .btn-update:hover { background: #e65100; animation: none; }
-        @keyframes pulse-update {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255,167,38,0.5); }
-            50%       { box-shadow: 0 0 0 6px rgba(255,167,38,0); }
-        }
-
-        /* Progress bar */
-        .progress-track {
-            width: 280px;
-            height: 6px;
-            background: var(--nord-border);
-            border-radius: 3px;
-            margin: 1rem auto 0;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: var(--nord-blue);
-            border-radius: 3px;
-            width: 0%;
-            transition: width 0.6s ease;
-        }
-        .progress-label {
-            font-size: 0.78rem;
-            color: var(--nord-muted);
-            margin-top: 0.5rem;
-            text-align: center;
-        }
-
         /* Invite form inline */
         .invite-form {
             display: flex;
@@ -520,11 +485,14 @@
     <header>
         <div class="logo-menu-wrapper">
             <button class="logo-btn" onclick="toggleLogoMenu()" id="logoBtn" aria-haspopup="true" aria-expanded="false">
-                <svg viewBox="0 0 36 36" fill="none" width="36" height="36">
-                    <rect width="36" height="36" rx="8" fill="#4687ff"/>
-                    <path d="M18 8L10 14v8l8 6 8-6v-8l-8-6zm0 3l5 3.75v5.5L18 24l-5-3.75v-5.5L18 11z" fill="white"/>
-                    <circle cx="18" cy="18" r="3" fill="white"/>
-                </svg>
+                <span class="logo-icon-wrap">
+                    <svg viewBox="0 0 36 36" fill="none" width="36" height="36">
+                        <rect width="36" height="36" rx="8" fill="#4687ff"/>
+                        <path d="M18 8L10 14v8l8 6 8-6v-8l-8-6zm0 3l5 3.75v5.5L18 24l-5-3.75v-5.5L18 11z" fill="white"/>
+                        <circle cx="18" cy="18" r="3" fill="white"/>
+                    </svg>
+                    <span class="update-dot" id="updateDot"></span>
+                </span>
                 <h1 style="font-size:1.3rem; font-weight:600; margin:0;">Meshnet <span style="color:var(--nord-blue);">Manager</span></h1>
             </button>
             <div class="logo-dropdown" id="logoDropdown">
@@ -799,9 +767,11 @@
             if (status.logged_in) {
                 btn.style.pointerEvents = '';
                 btn.title = '';
+                checkUpdateBadge();
             } else {
                 btn.style.pointerEvents = 'none';
                 document.getElementById('logoDropdown').classList.remove('open');
+                document.getElementById('updateDot').style.display = 'none';
             }
 
             if (!status.installed) {
@@ -1158,6 +1128,17 @@
             return div.innerHTML;
         }
 
+        // --- Update badge ---
+        async function checkUpdateBadge() {
+            try {
+                const r = await api('/api/version');
+                document.getElementById('updateDot').style.display = r.update_available ? 'block' : 'none';
+                if (r.update_available && r.latest) {
+                    document.getElementById('menuVersionSub').textContent = `v${r.latest} available`;
+                }
+            } catch (_) {}
+        }
+
         // --- Logo dropdown menu ---
         function toggleLogoMenu() {
             const dropdown = document.getElementById('logoDropdown');
@@ -1197,7 +1178,10 @@
                     showLoading('Updating NordVPN… This may take a moment.');
                     const u = await api('/api/update', 'POST');
                     hideLoading();
-                    sub.textContent = u.success ? `v${r.latest}` : sub.textContent;
+                    if (u.success) {
+                        sub.textContent = `v${r.latest}`;
+                        document.getElementById('updateDot').style.display = 'none';
+                    }
                     toast(u.message, u.success ? 'success' : 'error');
                 }
             } else {
