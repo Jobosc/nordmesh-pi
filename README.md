@@ -30,7 +30,7 @@ Open `http://<device-ip>:5000`. The UI guides you through installing NordVPN, lo
 
 | Method | How |
 |---|---|
-| **Access token** | Generate at [my.nordaccount.com](https://my.nordaccount.com) → Manual Setup |
+| **Access token** | Go to [my.nordaccount.com](https://my.nordaccount.com) → **Services** → **NordVPN** → scroll to **Manual Setup** → choose **Access Token** tab → click **Generate new token** |
 | **Browser link** | Click "Login via Browser Link" — the UI detects completion and redirects automatically |
 
 
