@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from flask import Flask, render_template, request, jsonify
+import connection_log
 import nordvpn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,6 +37,12 @@ FRAME_ANCESTORS = os.environ.get("ALLOWED_FRAME_ANCESTORS", "*").strip() or "*"
 # header. The frontend prefixes its API calls with it — otherwise "/api/status"
 # would hit Home Assistant's own API instead of this app.
 _INGRESS_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]*$")
+
+
+# How often the connection log checks which peers are online.
+CONNECTION_LOG_INTERVAL_S = _env_int("CONNECTION_LOG_INTERVAL_S", 30, 10)
+if os.environ.get("NORDMESH_DISABLE_POLLER") != "1":
+    connection_log.start_poller(CONNECTION_LOG_INTERVAL_S)
 
 
 def _ingress_path() -> str:
@@ -143,6 +150,15 @@ def api_set_nickname(peer):
 def api_remove_peer(peer):
     ok, msg = nordvpn.remove_peer(peer)
     return jsonify({"success": ok, "message": msg})
+
+
+@app.route("/api/connections")
+def api_connections():
+    return jsonify({
+        "devices": connection_log.entries(),
+        "interval": CONNECTION_LOG_INTERVAL_S,
+        "max_per_device": connection_log.MAX_CONNECTIONS_PER_PEER,
+    })
 
 
 @app.route("/api/invitations")

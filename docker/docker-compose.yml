@@ -18,9 +18,12 @@ services:
       NORDVPN_CONNECT_RETRY_DELAY_MS: "${NORDVPN_CONNECT_RETRY_DELAY_MS:-3000}"
       # Who may embed the UI in an iframe (your Home Assistant origin).
       ALLOWED_FRAME_ANCESTORS: "${ALLOWED_FRAME_ANCESTORS:-*}"
+      CONNECTION_LOG_INTERVAL_S: "${CONNECTION_LOG_INTERVAL_S:-30}"
     volumes:
       # Persist NordVPN login state and config across container restarts
       - nordvpn-data:/var/lib/nordvpn
+      # Persist the Meshnet connection log
+      - nordmesh-data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${PORT:-5000}/api/status"]
@@ -31,3 +34,4 @@ services:
 
 volumes:
   nordvpn-data:
+  nordmesh-data:

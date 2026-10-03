@@ -276,9 +276,21 @@ def disable_meshnet() -> tuple[bool, str]:
 
 def list_peers() -> list[dict]:
     """List all meshnet peers with their permissions."""
-    code, out, _ = _run(["nordvpn", "meshnet", "peer", "list"])
-    if code != 0:
+    return fetch_peers() or []
+
+
+def fetch_peers() -> list[dict] | None:
+    """Like list_peers, but tells "couldn't ask" apart from "no peers".
+
+    Returns None when the daemon didn't answer, and [] when Meshnet is off —
+    the connection log must not mistake a failed call for every peer going
+    offline.
+    """
+    code, out, err = _run(["nordvpn", "meshnet", "peer", "list"])
+    if "meshnet is not enabled" in (out + err).lower():
         return []
+    if code != 0:
+        return None
     return _parse_peer_list(out)
 
 

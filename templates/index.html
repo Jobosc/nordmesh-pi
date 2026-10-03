@@ -287,6 +287,69 @@
             gap: 0.5rem;
         }
 
+        /* Connection log */
+        .log-note {
+            font-size: 0.8rem;
+            color: var(--nord-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .log-device {
+            display: block;
+        }
+
+        .log-device summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .log-device summary::-webkit-details-marker { display: none; }
+
+        .log-device h4 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .log-last {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.8rem;
+            color: var(--nord-muted);
+            white-space: nowrap;
+        }
+
+        .log-chevron {
+            font-size: 1.1rem;
+            color: var(--nord-text);
+            transition: transform 0.2s;
+        }
+
+        .log-device[open] .log-chevron { transform: rotate(90deg); }
+
+        /* Only show the "last connected" hint while collapsed */
+        .log-device[open] .log-last-text { display: none; }
+
+        .log-times {
+            list-style: none;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .log-times li {
+            padding: 0.2rem 0;
+        }
+
+        .log-times .ago {
+            color: var(--nord-muted);
+            margin-left: 0.4rem;
+        }
+
         /* Toast notifications */
         .toast-container {
             position: fixed;
@@ -685,6 +748,7 @@
                 <button class="tab active" data-tab="peers" onclick="switchTab('peers')">Peers</button>
                 <button class="tab" data-tab="invite" onclick="switchTab('invite')">Send Invitation</button>
                 <button class="tab" data-tab="invitations" onclick="switchTab('invitations')">Invitations</button>
+                <button class="tab" data-tab="connections" onclick="switchTab('connections')">Connection Log</button>
             </div>
 
             <!-- Peers Tab -->
@@ -756,6 +820,20 @@
                         <h3>Received Invitations</h3>
                     </div>
                     <div id="receivedInvitations">
+                        <div class="empty">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Log Tab -->
+            <div class="tab-panel" id="tabConnections">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Recent Connections</h3>
+                        <button class="btn btn-outline btn-sm" onclick="loadConnections()">Refresh</button>
+                    </div>
+                    <p class="log-note" id="connectionLogNote"></p>
+                    <div id="connectionLog">
                         <div class="empty">Loading...</div>
                     </div>
                 </div>
@@ -856,6 +934,7 @@
             document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
 
             if (tab === 'invitations') loadInvitations();
+            if (tab === 'connections') loadConnections();
         }
 
         // --- Connection retries ---
@@ -1284,6 +1363,89 @@
             const r = await api('/api/invitations/deny', 'POST', { email });
             toast(r.message, r.success ? 'success' : 'error');
             loadInvitations();
+        }
+
+        // --- Connection log ---
+        function timeAgo(date) {
+            const s = Math.max(0, Math.round((Date.now() - date) / 1000));
+            if (s < 60) return 'just now';
+            const units = [['day', 86400], ['hour', 3600], ['minute', 60]];
+            for (const [name, secs] of units) {
+                const n = Math.floor(s / secs);
+                if (n >= 1) return `${n} ${name}${n === 1 ? '' : 's'} ago`;
+            }
+        }
+
+        // Collapsed devices are remembered per browser, keyed by hostname.
+        const COLLAPSED_KEY = 'nordmesh.collapsedLogDevices';
+
+        function collapsedDevices() {
+            try {
+                return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || []);
+            } catch (e) {
+                return new Set();
+            }
+        }
+
+        function rememberCollapsed(el) {
+            const collapsed = collapsedDevices();
+            if (el.open) collapsed.delete(el.dataset.host);
+            else collapsed.add(el.dataset.host);
+            try {
+                localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+            } catch (e) { /* storage unavailable (e.g. private mode) — just don't persist */ }
+        }
+
+        async function loadConnections() {
+            const container = document.getElementById('connectionLog');
+            let data;
+            try {
+                data = await api('/api/connections');
+            } catch (e) {
+                container.innerHTML = '<div class="empty">Could not load the connection log.</div>';
+                return;
+            }
+            document.getElementById('connectionLogNote').textContent =
+                `The last ${data.max_per_device} times each device came online. ` +
+                `Checked every ${data.interval} seconds, so times can be up to that late.`;
+
+            if (!data.devices.length) {
+                container.innerHTML = '<div class="empty">No devices recorded yet.</div>';
+                return;
+            }
+            const collapsed = collapsedDevices();
+            container.innerHTML = data.devices.map(d => {
+                const online = d.status === 'connected';
+                const hostname = escapeHtml(d.hostname);
+                const name = d.nickname
+                    ? `${escapeHtml(d.nickname)} <span style="font-size:0.75rem;font-weight:400;color:var(--nord-muted);">(${hostname})</span>`
+                    : hostname;
+                const times = d.connections.length
+                    ? `<ul class="log-times">${d.connections.map(t => {
+                        const date = new Date(t);
+                        return `<li>${escapeHtml(date.toLocaleString())}<span class="ago">${timeAgo(date)}</span></li>`;
+                    }).join('')}</ul>`
+                    : '<div class="log-times" style="color:var(--nord-muted);">No connections recorded yet.</div>';
+                const last = d.connections.length ? `Last: ${timeAgo(new Date(d.connections[0]))}` : '';
+                return `<details class="peer log-device" data-host="${hostname}"
+                        ${collapsed.has(d.hostname) ? '' : 'open'} ontoggle="rememberCollapsed(this)">
+                    <summary>
+                        <div class="peer-info">
+                            <h4><span class="status-dot ${online ? 'green' : 'red'}"></span>${name}</h4>
+                            <div class="peer-meta">
+                                <span>${online ? 'Online' : 'Offline'}</span>
+                                ${d.ip ? `<span>${escapeHtml(d.ip)}</span>` : ''}
+                                ${d.os ? `<span>${escapeHtml(d.os)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="log-last">
+                            <span class="log-last-text">${last}</span>
+                            <span class="log-chevron">&#9656;</span>
+                        </div>
+                    </summary>
+                    ${times}
+                </details>`;
+            }).join('');
         }
 
         async function refreshAll() {

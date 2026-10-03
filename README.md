@@ -41,6 +41,8 @@ Open `http://<device-ip>` (native) or `http://<device-ip>:5000` (Docker). The UI
 | `HOST` / `PORT` | `0.0.0.0` / `5000` | Where the web UI listens |
 | `NORDVPN_CONNECT_ATTEMPTS` | `5` | How many times the UI retries the NordVPN daemon before showing the "Can't Connect to NordVPN" screen |
 | `NORDVPN_CONNECT_RETRY_DELAY_MS` | `3000` | Delay between those retries |
+| `CONNECTION_LOG_INTERVAL_S` | `30` | How often the **Connection Log** tab's background check looks for devices coming online (minimum 10) |
+| `NORDMESH_DATA_DIR` | `data/` in the app folder | Where the connection log is stored |
 | `ALLOWED_FRAME_ANCESTORS` | `*` | Origins allowed to embed the UI in an iframe, e.g. `https://ha.example.com`. Use `none` to forbid embedding |
 
 If the NordVPN daemon isn't reachable (`nordvpnd` stopped, missing socket permissions, or missing container capabilities), the UI retries and then shows an error screen with the daemon's own message and a **Try Again** button. It recovers on its own as soon as the daemon responds.
