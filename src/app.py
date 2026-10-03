@@ -2,20 +2,14 @@
 
 import logging
 import os
+import re
 from flask import Flask, render_template, request, jsonify
-from werkzeug.middleware.proxy_fix import ProxyFix
-import cf_access
 import nordvpn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='../templates')
-
-# Behind cloudflared (or any reverse proxy) the real scheme, host and client IP
-# arrive in X-Forwarded-* headers. Without this the app treats every request as
-# plain local http, which breaks secure-cookie handling and access logging.
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 
 def _env_int(name: str, default: int, minimum: int) -> int:
@@ -37,7 +31,16 @@ CONNECT_RETRY_DELAY_MS = _env_int("NORDVPN_CONNECT_RETRY_DELAY_MS", 3000, 250)
 # (e.g. "https://ha.example.com") once you know it.
 FRAME_ANCESTORS = os.environ.get("ALLOWED_FRAME_ANCESTORS", "*").strip() or "*"
 
-cf_access.init_app(app)
+# Home Assistant ingress (the hass_ingress integration, or add-on ingress) serves
+# the UI under a sub-path such as /api/ingress/nordmesh and announces it in this
+# header. The frontend prefixes its API calls with it — otherwise "/api/status"
+# would hit Home Assistant's own API instead of this app.
+_INGRESS_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]*$")
+
+
+def _ingress_path() -> str:
+    path = request.headers.get("X-Ingress-Path", "").rstrip("/")
+    return path if _INGRESS_PATH_RE.match(path) else ""
 
 
 @app.after_request
@@ -61,6 +64,7 @@ def index():
         status=status,
         connect_attempts=CONNECT_ATTEMPTS,
         connect_retry_delay_ms=CONNECT_RETRY_DELAY_MS,
+        base_path=_ingress_path(),
     )
 
 

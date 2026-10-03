@@ -33,6 +33,24 @@ class TestIndex:
         assert "const CONNECT_ATTEMPTS = 7;" in html
         assert "const CONNECT_RETRY_DELAY_MS = 1500;" in html
 
+    def _base_path(self, client, headers=None):
+        with patch("nordvpn.get_status", return_value={"installed": False}):
+            html = client.get("/", headers=headers or {}).get_data(as_text=True)
+        line = next(l for l in html.splitlines() if "const BASE_PATH" in l)
+        return line.strip()
+
+    def test_base_path_empty_when_accessed_directly(self, client):
+        assert self._base_path(client) == 'const BASE_PATH = "";'
+
+    def test_base_path_follows_ingress_header(self, client):
+        """Behind Home Assistant ingress, API calls must stay under the sub-path."""
+        line = self._base_path(client, {"X-Ingress-Path": "/api/ingress/nordmesh/"})
+        assert line == 'const BASE_PATH = "/api/ingress/nordmesh";'
+
+    def test_base_path_rejects_unsafe_header(self, client):
+        line = self._base_path(client, {"X-Ingress-Path": '/x";alert(1);//'})
+        assert line == 'const BASE_PATH = "";'
+
 
 # ---------------------------------------------------------------------------
 # Retry configuration

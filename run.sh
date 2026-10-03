@@ -10,15 +10,7 @@ if ! command -v uv &> /dev/null; then
 fi
 
 echo "Syncing dependencies..."
-# Keep the Cloudflare Access verification dependency installed when Access is
-# configured — a plain "uv sync" prunes extras, which would make the app refuse
-# all Cloudflare traffic after a restart.
-if [[ -n "${CF_ACCESS_TEAM_DOMAIN:-}" && -n "${CF_ACCESS_AUD:-}" ]]; then
-    echo "Cloudflare Access configured — including the 'cloudflare' extra"
-    uv sync --extra cloudflare
-else
-    uv sync
-fi
+uv sync
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-5000}"

@@ -28,9 +28,7 @@ WORKDIR /app
 
 # Install Python deps as a cached layer before copying app code
 COPY pyproject.toml uv.lock ./
-# --extra cloudflare ships PyJWT so Cloudflare Access tokens can be verified
-# when CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD are set.
-RUN uv sync --no-dev --frozen --extra cloudflare
+RUN uv sync --no-dev --frozen
 
 # Copy application
 COPY src/ src/

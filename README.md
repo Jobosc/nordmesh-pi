@@ -42,20 +42,22 @@ Open `http://<device-ip>:5000`. The UI guides you through installing NordVPN, lo
 | `NORDVPN_CONNECT_ATTEMPTS` | `5` | How many times the UI retries the NordVPN daemon before showing the "Can't Connect to NordVPN" screen |
 | `NORDVPN_CONNECT_RETRY_DELAY_MS` | `3000` | Delay between those retries |
 | `ALLOWED_FRAME_ANCESTORS` | `*` | Origins allowed to embed the UI in an iframe, e.g. `https://ha.example.com`. Use `none` to forbid embedding |
-| `CF_ACCESS_TEAM_DOMAIN` | — | Cloudflare Zero Trust team domain. Set together with `CF_ACCESS_AUD` to verify Access tokens |
-| `CF_ACCESS_AUD` | — | Cloudflare Access application audience (AUD) tag |
-| `CF_ACCESS_ALLOW_LOCAL` | `true` | Allow requests that didn't arrive through Cloudflare (LAN, healthchecks) |
 
 If the NordVPN daemon isn't reachable (`nordvpnd` stopped, missing socket permissions, or missing container capabilities), the UI retries and then shows an error screen with the daemon's own message and a **Try Again** button. It recovers on its own as soon as the daemon responds.
 
-## Remote access (HTTPS + Home Assistant)
+## Home Assistant
 
-To reach the UI from outside your network — or embed it in a Home Assistant
-dashboard — see **[docs/remote-access.md](docs/remote-access.md)**. It sets up a
-Cloudflare Tunnel (HTTPS, no open router ports) protected by Cloudflare Access:
+To open the UI from a Home Assistant dashboard — including away from home —
+see **[docs/home-assistant.md](docs/home-assistant.md)**. The recommended setup
+uses the [hass_ingress](https://github.com/lovelylain/hass_ingress) integration,
+so Home Assistant proxies the UI behind its own login and HTTPS:
 
-```bash
-sudo ./cloudflare/setup-tunnel.sh meshnet.example.com
+```yaml
+ingress:
+  nordmesh:
+    title: Meshnet
+    icon: mdi:vpn
+    url: http://<device-ip>:5000
 ```
 
 ## Security
@@ -64,5 +66,5 @@ sudo ./cloudflare/setup-tunnel.sh meshnet.example.com
 your NordVPN account, remove peers, send invitations, and trigger an update that
 restarts the service — so never expose it directly to the internet.
 
-- **Remote access:** use Cloudflare Access, as described in [docs/remote-access.md](docs/remote-access.md), and set `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` so the app verifies tokens itself.
-- **LAN only:** keep it bound to the local network and restrict with Caddy basic auth (`basicauth`) or firewall rules (`ufw`).
+- **Remote access:** go through Home Assistant's ingress panel (see above) rather than forwarding the port.
+- **LAN only:** restrict it further with Caddy basic auth (`basicauth`) or firewall rules (`ufw`).

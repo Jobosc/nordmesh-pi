@@ -800,7 +800,7 @@
                 opts.headers['Content-Type'] = 'application/json';
                 opts.body = JSON.stringify(body);
             }
-            const res = await fetch(url, opts);
+            const res = await fetch(BASE_PATH + url, opts);
             return res.json();
         }
 
@@ -863,6 +863,8 @@
         // unreachable, and gives up with an error screen after this many tries.
         const CONNECT_ATTEMPTS = {{ connect_attempts|int }};
         const CONNECT_RETRY_DELAY_MS = {{ connect_retry_delay_ms|int }};
+        // Sub-path when served through Home Assistant ingress, "" otherwise.
+        const BASE_PATH = {{ base_path|tojson }};
 
         let _connectAttempts = 0;
         let _connectRetryTimer = null;

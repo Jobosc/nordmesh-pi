@@ -539,15 +539,7 @@ def perform_update() -> tuple[bool, str]:
         return False, f"git pull failed: {err or out}"
 
     uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
-    cmd = [uv, "sync"]
-    timeout = 120
-    # A plain "uv sync" prunes extras. If Cloudflare Access verification is
-    # configured, dropping PyJWT here would make the app fail closed on every
-    # Cloudflare request — locking the user out remotely via the update button.
-    if os.environ.get("CF_ACCESS_TEAM_DOMAIN") and os.environ.get("CF_ACCESS_AUD"):
-        cmd += ["--extra", "cloudflare"]
-        timeout = 300  # cryptography can be slow to install on a Pi
-    code, out, err = _run(cmd, timeout=timeout)
+    code, out, err = _run([uv, "sync"], timeout=120)
     if code != 0:
         return False, f"uv sync failed: {err or out}"
 

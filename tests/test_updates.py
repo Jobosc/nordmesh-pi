@@ -147,33 +147,3 @@ class TestPerformUpdate:
             ok, msg = nordvpn.perform_update()
         assert ok is False
         assert "uv sync" in msg.lower()
-
-    def _sync_cmd(self, env):
-        """Run perform_update under `env` and return the uv sync argv."""
-        import threading as _threading
-        calls = []
-
-        def fake_run(cmd, **kwargs):
-            calls.append(cmd)
-            return (0, "ok", "")
-
-        with patch("nordvpn._run", side_effect=fake_run), \
-             patch("shutil.which", return_value="/usr/bin/uv"), \
-             patch.dict("os.environ", env, clear=True), \
-             patch.object(_threading, "Thread"):
-            nordvpn.perform_update()
-        return next(c for c in calls if "sync" in c)
-
-    def test_sync_keeps_cloudflare_extra_when_access_configured(self):
-        """A plain `uv sync` prunes PyJWT, which would lock the user out
-        remotely: the app then fails closed on every Cloudflare request."""
-        cmd = self._sync_cmd({"CF_ACCESS_TEAM_DOMAIN": "myteam", "CF_ACCESS_AUD": "tag"})
-        assert "--extra" in cmd and "cloudflare" in cmd
-
-    def test_sync_omits_extra_when_access_not_configured(self):
-        cmd = self._sync_cmd({})
-        assert "--extra" not in cmd
-
-    def test_sync_omits_extra_when_only_team_domain_set(self):
-        cmd = self._sync_cmd({"CF_ACCESS_TEAM_DOMAIN": "myteam"})
-        assert "--extra" not in cmd
