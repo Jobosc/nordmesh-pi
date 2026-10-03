@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify
 import connection_log
 import nordvpn
@@ -78,6 +79,24 @@ def index():
 @app.route("/api/status")
 def api_status():
     return jsonify(nordvpn.get_status())
+
+
+@app.route("/api/health")
+def api_health():
+    """Meshnet health for Home Assistant (or any monitor) to poll.
+
+    Always answers 200 so a monitor can tell "Meshnet is down" (ok: false)
+    apart from "the Pi is down" (no answer at all).
+    """
+    state, message = nordvpn.meshnet_health()
+    if state != "ok":
+        log.warning("Meshnet health: %s — %s", state, message)
+    return jsonify({
+        "ok": state == "ok",
+        "state": state,
+        "message": message,
+        "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
 
 
 @app.route("/api/install", methods=["POST"])

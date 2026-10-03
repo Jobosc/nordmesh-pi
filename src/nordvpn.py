@@ -104,6 +104,24 @@ def get_status() -> dict:
     return info
 
 
+
+def meshnet_health(status: dict | None = None) -> tuple[str, str]:
+    """Reduce get_status() to one health state plus a readable reason.
+
+    Checked in dependency order, so the reason names the first thing that is
+    broken rather than everything downstream of it.
+    """
+    status = status if status is not None else get_status()
+    if not status.get("installed"):
+        return "not_installed", "NordVPN is not installed."
+    if not status.get("daemon_ok"):
+        return "daemon_unreachable", status.get("daemon_error") or "The NordVPN daemon is not responding."
+    if not status.get("logged_in"):
+        return "logged_out", "NordVPN is logged out."
+    if not status.get("meshnet_enabled"):
+        return "meshnet_off", "Meshnet is turned off."
+    return "ok", "Meshnet is running."
+
 def _needs_user_input(text: str) -> bool:
     """Return True if text looks like nordvpn is waiting for a y/n answer."""
     plain = _strip_ansi(text).lower()

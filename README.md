@@ -47,20 +47,15 @@ Open `http://<device-ip>` (native) or `http://<device-ip>:5000` (Docker). The UI
 
 If the NordVPN daemon isn't reachable (`nordvpnd` stopped, missing socket permissions, or missing container capabilities), the UI retries and then shows an error screen with the daemon's own message and a **Try Again** button. It recovers on its own as soon as the daemon responds.
 
-## Home Assistant
+## Home Assistant (optional)
 
-To open the UI from a Home Assistant dashboard — including away from home —
-see **[docs/home-assistant.md](docs/home-assistant.md)**. The recommended setup
-uses the [hass_ingress](https://github.com/lovelylain/hass_ingress) integration,
-so Home Assistant proxies the UI behind its own login and HTTPS:
+Nordmesh works without Home Assistant. If you run HA, you can add Nordmesh to
+the HA sidebar, reachable from anywhere through HA's login and HTTPS, and get
+a push notification when the Pi loses Meshnet or goes offline. Nothing changes
+on the Pi.
 
-```yaml
-ingress:
-  nordmesh:
-    title: Meshnet
-    icon: mdi:vpn
-    url: http://<device-ip>        # :5000 for Docker
-```
+See **[docs/home-assistant.md](docs/home-assistant.md)** for the step-by-step
+setup and troubleshooting.
 
 ## Security
 
@@ -68,5 +63,5 @@ ingress:
 your NordVPN account, remove peers, send invitations, and trigger an update that
 restarts the service — so never expose it directly to the internet.
 
-- **Remote access:** go through Home Assistant's ingress panel (see above) rather than forwarding the port.
+- **Remote access:** go through Home Assistant's ingress panel (see [docs/home-assistant.md](docs/home-assistant.md)) rather than forwarding the port.
 - **LAN only:** restrict it further with Caddy basic auth (`basicauth`) or firewall rules (`ufw`).
