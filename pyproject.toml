@@ -8,6 +8,13 @@ dependencies = [
     "gunicorn>=21.2",
 ]
 
+[project.optional-dependencies]
+# Needed only to verify Cloudflare Access JWTs at the origin.
+# Install with: uv sync --extra cloudflare
+cloudflare = [
+    "pyjwt[crypto]>=2.8",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

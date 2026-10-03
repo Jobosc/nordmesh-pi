@@ -22,7 +22,9 @@ jobs:
           python-version-file: pyproject.toml
 
       - name: Install dependencies
-        run: uv sync --group dev
+        # --extra cloudflare pulls in PyJWT so the Cloudflare Access
+        # signature-verification tests run instead of being skipped.
+        run: uv sync --group dev --extra cloudflare
 
       - name: Run tests
         run: uv run pytest

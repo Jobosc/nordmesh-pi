@@ -90,6 +90,83 @@ class TestGetStatus:
         assert status["installed"] is False
         assert status["logged_in"] is False
         assert status["meshnet_enabled"] is False
+        assert status["daemon_ok"] is False
+
+    def test_daemon_ok_when_reachable(self):
+        def fake_run(cmd, **kwargs):
+            if "account" in cmd:
+                return (0, "Email Address: user@example.com", "")
+            if "peer" in cmd:
+                return (0, "This device:\nHostname: mydevice.nord", "")
+            if "status" in cmd:
+                return (0, "Status: Disconnected", "")
+            return (1, "", "")
+
+        with patch("nordvpn.is_installed", return_value=True), \
+             patch("nordvpn._run", side_effect=fake_run):
+            status = nordvpn.get_status()
+
+        assert status["daemon_ok"] is True
+        assert status["daemon_error"] == ""
+
+    def test_daemon_unreachable(self):
+        """When the daemon is down, report it instead of claiming 'not logged in'."""
+        def fake_run(cmd, **kwargs):
+            if "status" in cmd:
+                return (1, "", "Whoops! Cannot reach System Daemon.")
+            pytest.fail(f"no other nordvpn command should run: {cmd}")
+
+        with patch("nordvpn.is_installed", return_value=True), \
+             patch("nordvpn._run", side_effect=fake_run):
+            status = nordvpn.get_status()
+
+        assert status["installed"] is True
+        assert status["daemon_ok"] is False
+        assert "Cannot reach System Daemon" in status["daemon_error"]
+        assert status["logged_in"] is False
+
+
+# ---------------------------------------------------------------------------
+# probe_daemon
+# ---------------------------------------------------------------------------
+
+class TestProbeDaemon:
+    def test_reachable_returns_connection(self):
+        with patch("nordvpn._run", return_value=(0, "Status: Connected\nServer: de123", "")):
+            ok, connection, err = nordvpn.probe_daemon()
+        assert ok is True
+        assert connection == "Connected"
+        assert err == ""
+
+    def test_reachable_without_status_line(self):
+        with patch("nordvpn._run", return_value=(0, "", "")):
+            ok, connection, _ = nordvpn.probe_daemon()
+        assert ok is True
+        assert connection == "Disconnected"
+
+    def test_unreachable_uses_stderr(self):
+        with patch("nordvpn._run", return_value=(1, "", "Whoops! Cannot reach System Daemon.")):
+            ok, _, err = nordvpn.probe_daemon()
+        assert ok is False
+        assert err == "Whoops! Cannot reach System Daemon."
+
+    def test_unreachable_falls_back_to_stdout(self):
+        with patch("nordvpn._run", return_value=(1, "permission denied on socket", "")):
+            ok, _, err = nordvpn.probe_daemon()
+        assert ok is False
+        assert err == "permission denied on socket"
+
+    def test_unreachable_strips_ansi(self):
+        with patch("nordvpn._run", return_value=(1, "", "\x1b[31mCannot reach System Daemon\x1b[0m")):
+            ok, _, err = nordvpn.probe_daemon()
+        assert ok is False
+        assert "\x1b[" not in err
+
+    def test_unreachable_without_output_has_default_message(self):
+        with patch("nordvpn._run", return_value=(1, "", "")):
+            ok, _, err = nordvpn.probe_daemon()
+        assert ok is False
+        assert err
 
 
 # ---------------------------------------------------------------------------

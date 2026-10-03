@@ -24,6 +24,36 @@ class TestIndex:
             resp = client.get("/")
         assert resp.status_code == 200
 
+    def test_injects_connection_retry_config(self, client):
+        """The retry limit must reach the page, or the error screen never shows."""
+        with patch("nordvpn.get_status", return_value={"installed": False}), \
+             patch.object(flask_app, "CONNECT_ATTEMPTS", 7), \
+             patch.object(flask_app, "CONNECT_RETRY_DELAY_MS", 1500):
+            html = client.get("/").get_data(as_text=True)
+        assert "const CONNECT_ATTEMPTS = 7;" in html
+        assert "const CONNECT_RETRY_DELAY_MS = 1500;" in html
+
+
+# ---------------------------------------------------------------------------
+# Retry configuration
+# ---------------------------------------------------------------------------
+
+class TestEnvInt:
+    def test_reads_env_value(self):
+        with patch.dict("os.environ", {"X_ATTEMPTS": "9"}):
+            assert flask_app._env_int("X_ATTEMPTS", 5, 1) == 9
+
+    def test_default_when_unset(self):
+        assert flask_app._env_int("X_UNSET_ATTEMPTS", 5, 1) == 5
+
+    def test_default_when_not_a_number(self):
+        with patch.dict("os.environ", {"X_ATTEMPTS": "lots"}):
+            assert flask_app._env_int("X_ATTEMPTS", 5, 1) == 5
+
+    def test_clamped_to_minimum(self):
+        with patch.dict("os.environ", {"X_ATTEMPTS": "0"}):
+            assert flask_app._env_int("X_ATTEMPTS", 5, 1) == 1
+
 
 # ---------------------------------------------------------------------------
 # GET /api/status
@@ -43,6 +73,13 @@ class TestAPIStatus:
         with patch("nordvpn.get_status", return_value={"installed": False, "logged_in": False}):
             resp = client.get("/api/status")
         assert resp.get_json()["installed"] is False
+
+    def test_exposes_daemon_failure(self, client):
+        status = {"installed": True, "daemon_ok": False, "daemon_error": "Cannot reach System Daemon."}
+        with patch("nordvpn.get_status", return_value=status):
+            data = client.get("/api/status").get_json()
+        assert data["daemon_ok"] is False
+        assert data["daemon_error"] == "Cannot reach System Daemon."
 
 
 # ---------------------------------------------------------------------------
@@ -154,13 +191,30 @@ class TestAPILogout:
 # ---------------------------------------------------------------------------
 
 class TestResponseHeaders:
-    def test_iframe_headers_on_index(self, client):
+    def test_iframe_allowed_by_default_on_index(self, client):
         with patch("nordvpn.get_status", return_value={"installed": False}):
             resp = client.get("/")
-        assert resp.headers.get("X-Frame-Options") == "ALLOWALL"
         assert "frame-ancestors *" in resp.headers.get("Content-Security-Policy", "")
+        # X-Frame-Options has no "allow any origin" value; sending one would
+        # either be ignored or block the Home Assistant iframe.
+        assert resp.headers.get("X-Frame-Options") is None
 
-    def test_iframe_headers_on_api(self, client):
+    def test_iframe_allowed_by_default_on_api(self, client):
         with patch("nordvpn.get_status", return_value={"installed": False}):
             resp = client.get("/api/status")
-        assert resp.headers.get("X-Frame-Options") == "ALLOWALL"
+        assert "frame-ancestors *" in resp.headers.get("Content-Security-Policy", "")
+        assert resp.headers.get("X-Frame-Options") is None
+
+    def test_frame_ancestors_can_be_restricted(self, client):
+        with patch("nordvpn.get_status", return_value={"installed": False}), \
+             patch.object(flask_app, "FRAME_ANCESTORS", "https://ha.example.com"):
+            resp = client.get("/")
+        assert resp.headers["Content-Security-Policy"] == "frame-ancestors https://ha.example.com"
+        assert resp.headers.get("X-Frame-Options") is None
+
+    def test_framing_can_be_forbidden(self, client):
+        with patch("nordvpn.get_status", return_value={"installed": False}), \
+             patch.object(flask_app, "FRAME_ANCESTORS", "none"):
+            resp = client.get("/")
+        assert resp.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+        assert resp.headers["X-Frame-Options"] == "DENY"

@@ -1,7 +1,10 @@
 """Flask web application for NordVPN Meshnet management."""
 
 import logging
+import os
 from flask import Flask, render_template, request, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
+import cf_access
 import nordvpn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -9,18 +12,56 @@ log = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='../templates')
 
+# Behind cloudflared (or any reverse proxy) the real scheme, host and client IP
+# arrive in X-Forwarded-* headers. Without this the app treats every request as
+# plain local http, which breaks secure-cookie handling and access logging.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+
+def _env_int(name: str, default: int, minimum: int) -> int:
+    """Read a positive integer from the environment, falling back on junk values."""
+    try:
+        return max(minimum, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        log.warning("%s is not an integer — using default %d", name, default)
+        return default
+
+
+# How often the UI retries reaching the NordVPN daemon before showing the
+# "can't connect" error screen, and how long it waits between tries.
+CONNECT_ATTEMPTS = _env_int("NORDVPN_CONNECT_ATTEMPTS", 5, 1)
+CONNECT_RETRY_DELAY_MS = _env_int("NORDVPN_CONNECT_RETRY_DELAY_MS", 3000, 250)
+
+# Which origins may embed the UI in an iframe. Default "*" keeps the Home
+# Assistant panel working from any HA URL; narrow it to your HA origin
+# (e.g. "https://ha.example.com") once you know it.
+FRAME_ANCESTORS = os.environ.get("ALLOWED_FRAME_ANCESTORS", "*").strip() or "*"
+
+cf_access.init_app(app)
+
 
 @app.after_request
-def allow_iframe(response):
-    response.headers["X-Frame-Options"] = "ALLOWALL"
-    response.headers["Content-Security-Policy"] = "frame-ancestors *"
+def set_security_headers(response):
+    ancestors = "'none'" if FRAME_ANCESTORS.lower() in ("none", "'none'") else FRAME_ANCESTORS
+    response.headers["Content-Security-Policy"] = f"frame-ancestors {ancestors}"
+    # X-Frame-Options cannot express an allowlist, and any value other than
+    # DENY/SAMEORIGIN is ignored by browsers — so only send it to forbid framing.
+    if ancestors == "'none'":
+        response.headers["X-Frame-Options"] = "DENY"
+    else:
+        response.headers.pop("X-Frame-Options", None)
     return response
 
 
 @app.route("/")
 def index():
     status = nordvpn.get_status()
-    return render_template("index.html", status=status)
+    return render_template(
+        "index.html",
+        status=status,
+        connect_attempts=CONNECT_ATTEMPTS,
+        connect_retry_delay_ms=CONNECT_RETRY_DELAY_MS,
+    )
 
 
 @app.route("/api/status")
@@ -149,7 +190,6 @@ def api_update():
 
 
 if __name__ == "__main__":
-    import os
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 5000))
     app.run(host=host, port=port, debug=True)

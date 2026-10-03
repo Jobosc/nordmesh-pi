@@ -368,6 +368,73 @@
             font-size: 0.9rem;
         }
 
+        /* Daemon connection failure screen */
+        .setup-card.error-card {
+            border-color: var(--nord-red);
+            max-width: 560px;
+        }
+
+        .error-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(239, 83, 80, 0.15);
+            color: var(--nord-red);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.9rem;
+            font-weight: 600;
+            margin: 0 auto 1.25rem;
+        }
+
+        .error-detail {
+            background: var(--nord-darker);
+            border: 1px solid var(--nord-border);
+            border-radius: 6px;
+            padding: 0.75rem 0.9rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            color: var(--nord-red);
+            white-space: pre-wrap;
+            word-break: break-word;
+            text-align: left;
+            max-height: 160px;
+            overflow-y: auto;
+            margin-bottom: 1.25rem;
+        }
+
+        .error-hints {
+            text-align: left;
+            font-size: 0.82rem;
+            color: var(--nord-muted);
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            padding-left: 1.1rem;
+        }
+
+        .error-hints code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            padding: 0.1rem 0.35rem;
+            color: var(--nord-text);
+        }
+
+        .attempt-counter {
+            font-size: 0.8rem;
+            color: var(--nord-muted);
+        }
+
+        .connecting-card .spinner {
+            width: 32px;
+            height: 32px;
+            border-width: 3px;
+            border-color: rgba(70, 135, 255, 0.25);
+            border-top-color: var(--nord-blue);
+            margin-bottom: 1.25rem;
+        }
+
         /* Inline login terminal panel */
         .login-terminal-pre {
             background: var(--nord-darker);
@@ -522,6 +589,33 @@
     </header>
 
     <div class="container">
+        <!-- Connecting to the NordVPN daemon (shown while retrying) -->
+        <div id="viewConnecting" class="setup-card connecting-card" style="display:none;">
+            <div class="spinner"></div>
+            <h2>Connecting to NordVPN…</h2>
+            <p id="connectingMessage">Waiting for the NordVPN daemon to respond.</p>
+            <div class="attempt-counter" id="connectingAttempts"></div>
+        </div>
+
+        <!-- Daemon unreachable after all retries -->
+        <div id="viewDaemonError" class="setup-card error-card" style="display:none;">
+            <div class="error-icon">!</div>
+            <h2>Can't Connect to NordVPN</h2>
+            <p id="daemonErrorSummary">
+                Meshnet Manager could not reach the NordVPN daemon.
+            </p>
+            <pre class="error-detail" id="daemonErrorDetail"></pre>
+            <ul class="error-hints">
+                <li>Check the daemon is running: <code>sudo systemctl status nordvpnd</code></li>
+                <li>Start it if needed: <code>sudo systemctl start nordvpnd</code></li>
+                <li>Permission denied? Add yourself to the group: <code>sudo usermod -aG nordvpn $USER</code>, then log out and back in.</li>
+                <li>In Docker, the container needs <code>NET_ADMIN</code> and <code>/dev/net/tun</code>.</li>
+            </ul>
+            <button class="btn btn-primary" onclick="retryConnection()" id="btnRetryConnection">
+                Try Again
+            </button>
+        </div>
+
         <!-- Not Installed -->
         <div id="viewInstall" class="setup-card" style="display:none;">
             <h2>NordVPN Not Installed</h2>
@@ -711,8 +805,10 @@
         }
 
         // --- Views ---
+        const VIEWS = ['viewConnecting', 'viewDaemonError', 'viewInstall', 'viewLogin', 'viewEnableMeshnet', 'viewDashboard'];
+
         function showView(id) {
-            ['viewInstall', 'viewLogin', 'viewEnableMeshnet', 'viewDashboard'].forEach(v => {
+            VIEWS.forEach(v => {
                 document.getElementById(v).style.display = 'none';
             });
             document.getElementById(id).style.display = '';
@@ -743,6 +839,15 @@
             }
         }
 
+        function markStatusBarUnreachable() {
+            document.getElementById('dotInstalled').className = 'status-dot red';
+            document.getElementById('lblInstalled').textContent = 'NordVPN unreachable';
+            document.getElementById('dotLoggedIn').className = 'status-dot';
+            document.getElementById('lblLoggedIn').textContent = '--';
+            document.getElementById('dotMeshnet').className = 'status-dot';
+            document.getElementById('lblMeshnet').textContent = '--';
+        }
+
         // --- Tab switching ---
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -753,14 +858,76 @@
             if (tab === 'invitations') loadInvitations();
         }
 
+        // --- Connection retries ---
+        // The UI keeps retrying /api/status while the NordVPN daemon is
+        // unreachable, and gives up with an error screen after this many tries.
+        const CONNECT_ATTEMPTS = {{ connect_attempts|int }};
+        const CONNECT_RETRY_DELAY_MS = {{ connect_retry_delay_ms|int }};
+
+        let _connectAttempts = 0;
+        let _connectRetryTimer = null;
+
+        function resetConnectionRetries() {
+            _connectAttempts = 0;
+            if (_connectRetryTimer) { clearTimeout(_connectRetryTimer); _connectRetryTimer = null; }
+        }
+
+        /** Record a failed attempt to reach NordVPN; retry, or show the error screen. */
+        function handleConnectionFailure(message) {
+            _connectAttempts++;
+            markStatusBarUnreachable();
+
+            if (_connectAttempts >= CONNECT_ATTEMPTS) {
+                showDaemonError(message);
+                return;
+            }
+
+            showView('viewConnecting');
+            document.getElementById('connectingMessage').textContent = message;
+            document.getElementById('connectingAttempts').textContent =
+                `Attempt ${_connectAttempts} of ${CONNECT_ATTEMPTS} — retrying…`;
+
+            if (_connectRetryTimer) clearTimeout(_connectRetryTimer);
+            _connectRetryTimer = setTimeout(checkStatus, CONNECT_RETRY_DELAY_MS);
+        }
+
+        function showDaemonError(message) {
+            stopLoginPoll();
+            if (_connectRetryTimer) { clearTimeout(_connectRetryTimer); _connectRetryTimer = null; }
+            hideLoading();
+            showView('viewDaemonError');
+            document.getElementById('daemonErrorSummary').textContent =
+                `Meshnet Manager could not reach NordVPN after ${CONNECT_ATTEMPTS} ` +
+                `attempt${CONNECT_ATTEMPTS === 1 ? '' : 's'}.`;
+            document.getElementById('daemonErrorDetail').textContent = message;
+        }
+
+        /** "Try Again" on the error screen: start a fresh round of attempts. */
+        function retryConnection() {
+            resetConnectionRetries();
+            showView('viewConnecting');
+            document.getElementById('connectingMessage').textContent = 'Reconnecting to the NordVPN daemon…';
+            document.getElementById('connectingAttempts').textContent = '';
+            checkStatus();
+        }
+
         // --- Status & routing ---
         async function checkStatus() {
             let status;
             try {
                 status = await api('/api/status');
             } catch (err) {
+                handleConnectionFailure('Could not reach Meshnet Manager — the web service may have stopped.');
                 return;
             }
+
+            // Installed but the daemon is not answering: retry before giving up.
+            // Without the daemon we cannot tell login or meshnet state apart.
+            if (status.installed && status.daemon_ok === false) {
+                handleConnectionFailure(status.daemon_error || 'The NordVPN daemon did not respond.');
+                return;
+            }
+            resetConnectionRetries();
 
             updateStatusBar(status);
             const btn = document.getElementById('logoBtn');
@@ -1192,6 +1359,7 @@
         }
 
         // --- Init ---
+        showView('viewConnecting');
         checkStatus();
     </script>
 </body>

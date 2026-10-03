@@ -40,11 +40,54 @@ def install_nordvpn() -> tuple[bool, str]:
     return False, f"Installation failed: {err or out}"
 
 
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub('', text)
+
+
+def probe_daemon() -> tuple[bool, str, str]:
+    """Check whether the nordvpn daemon answers.
+
+    `nordvpn status` is the cheapest command that talks to the daemon, so its
+    output doubles as the connection state. Returns
+    (reachable, connection, error_message).
+    """
+    code, out, err = _run(["nordvpn", "status"], timeout=10)
+    if code != 0:
+        msg = _strip_ansi(err or out).strip()
+        log.warning("probe_daemon: nordvpn status failed (rc=%d): %s", code, msg)
+        return False, "", msg or "The NordVPN daemon did not respond."
+
+    connection = "Disconnected"
+    for line in out.splitlines():
+        if line.lower().startswith("status:"):
+            connection = line.split(":", 1)[1].strip()
+    return True, connection, ""
+
+
 def get_status() -> dict:
     """Get NordVPN connection and account status."""
-    info = {"installed": is_installed(), "logged_in": False, "meshnet_enabled": False, "connection": "Disconnected"}
+    info = {
+        "installed": is_installed(),
+        "daemon_ok": False,
+        "daemon_error": "",
+        "logged_in": False,
+        "meshnet_enabled": False,
+        "connection": "Disconnected",
+    }
     if not info["installed"]:
+        info["daemon_error"] = "NordVPN is not installed."
         return info
+
+    # Everything below needs the daemon — bail out early so the UI can tell
+    # "daemon unreachable" apart from "not logged in".
+    reachable, connection, daemon_error = probe_daemon()
+    info["daemon_ok"] = reachable
+    if not reachable:
+        info["daemon_error"] = daemon_error
+        return info
+    info["connection"] = connection
 
     code, out, _ = _run(["nordvpn", "account"])
     if code == 0 and "not logged in" not in out.lower():
@@ -58,19 +101,8 @@ def get_status() -> dict:
     if code == 0 and "meshnet is not enabled" not in out.lower():
         info["meshnet_enabled"] = True
 
-    code, out, _ = _run(["nordvpn", "status"])
-    if code == 0:
-        for line in out.splitlines():
-            if line.lower().startswith("status:"):
-                info["connection"] = line.split(":", 1)[1].strip()
-
     return info
 
-
-_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
-
-def _strip_ansi(text: str) -> str:
-    return _ANSI_RE.sub('', text)
 
 def _needs_user_input(text: str) -> bool:
     """Return True if text looks like nordvpn is waiting for a y/n answer."""
@@ -507,7 +539,15 @@ def perform_update() -> tuple[bool, str]:
         return False, f"git pull failed: {err or out}"
 
     uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
-    code, out, err = _run([uv, "sync"], timeout=120)
+    cmd = [uv, "sync"]
+    timeout = 120
+    # A plain "uv sync" prunes extras. If Cloudflare Access verification is
+    # configured, dropping PyJWT here would make the app fail closed on every
+    # Cloudflare request — locking the user out remotely via the update button.
+    if os.environ.get("CF_ACCESS_TEAM_DOMAIN") and os.environ.get("CF_ACCESS_AUD"):
+        cmd += ["--extra", "cloudflare"]
+        timeout = 300  # cryptography can be slow to install on a Pi
+    code, out, err = _run(cmd, timeout=timeout)
     if code != 0:
         return False, f"uv sync failed: {err or out}"
 
