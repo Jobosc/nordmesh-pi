@@ -189,6 +189,37 @@ class TestMeshnet:
             ok, _ = nordvpn.enable_meshnet()
         assert ok is False
 
+    def test_enable_turns_on_lan_discovery(self):
+        """Without LAN discovery, Meshnet's firewall blocks Home Assistant."""
+        with patch("nordvpn._run", return_value=(0, "ok", "")) as run:
+            nordvpn.enable_meshnet()
+        assert ["nordvpn", "set", "lan-discovery", "on"] in [c.args[0] for c in run.call_args_list]
+
+    def test_enable_skips_lan_discovery_when_meshnet_fails(self):
+        with patch("nordvpn._run", return_value=(1, "", "error")) as run:
+            nordvpn.enable_meshnet()
+        assert run.call_count == 1
+
+    def test_enable_succeeds_even_if_lan_discovery_fails(self):
+        results = iter([(0, "Meshnet is enabled.", ""), (1, "", "boom")])
+        with patch("nordvpn._run", side_effect=lambda *a, **k: next(results)):
+            ok, _ = nordvpn.enable_meshnet()
+        assert ok is True
+
+
+class TestEnableLanDiscovery:
+    def test_success(self):
+        with patch("nordvpn._run", return_value=(0, "LAN Discovery has been successfully set to 'enabled'.", "")):
+            assert nordvpn.enable_lan_discovery() is True
+
+    def test_already_enabled(self):
+        with patch("nordvpn._run", return_value=(1, "LAN Discovery is already set to 'enabled'.", "")):
+            assert nordvpn.enable_lan_discovery() is True
+
+    def test_failure(self):
+        with patch("nordvpn._run", return_value=(1, "", "error")):
+            assert nordvpn.enable_lan_discovery() is False
+
     def test_disable_success(self):
         with patch("nordvpn._run", return_value=(0, "Meshnet is disabled.", "")):
             ok, _ = nordvpn.disable_meshnet()

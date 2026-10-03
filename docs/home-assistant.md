@@ -27,9 +27,20 @@ its HTTPS and login. The Pi itself never has to be reachable from the internet.
      nordmesh:
        title: Meshnet
        icon: mdi:vpn
-       url: http://192.168.1.50:5000
+       url: http://192.168.1.50
        require_admin: true
    ```
+
+   A native install (`setup.sh`) binds the app to localhost and serves it on
+   port 80 through Caddy, so leave the port off. With Docker the app listens
+   on port 5000 directly — use `http://192.168.1.50:5000` instead. Either way,
+   check from the Home Assistant host first:
+   `curl -sI http://192.168.1.50/ | head -1` should print `200 OK`.
+
+   If that times out, check that LAN discovery is on
+   (`nordvpn settings | grep -i lan`). Meshnet's firewall otherwise drops
+   incoming connections from your home network. The UI turns it on when you
+   enable Meshnet; on older installs run `nordvpn set lan-discovery on` once.
 
 3. Restart Home Assistant. **Meshnet** appears in the sidebar.
 
@@ -45,7 +56,7 @@ everyone in your household should be able to manage Meshnet.
 ## Webpage dashboard (home network only)
 
 **Settings → Dashboards → Add Dashboard → Webpage**, URL
-`http://192.168.1.50:5000`.
+`http://192.168.1.50` (`:5000` for Docker).
 
 The page loads in your browser, not on the HA server, so this only works when
 your device can reach the Pi directly — and only if you opened Home Assistant

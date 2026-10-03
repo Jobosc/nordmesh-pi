@@ -247,9 +247,24 @@ def logout() -> tuple[bool, str]:
     return code == 0, out or err
 
 
+def enable_lan_discovery() -> bool:
+    """Let devices on the home network reach this machine.
+
+    Meshnet's firewall drops incoming LAN connections unless LAN discovery is
+    on, which makes the UI unreachable from Home Assistant and other devices.
+    """
+    code, out, err = _run(["nordvpn", "set", "lan-discovery", "on"])
+    if code == 0 or "already" in (out + err).lower():
+        return True
+    log.warning("enable_lan_discovery: failed (rc=%d): %s", code, _strip_ansi(err or out).strip())
+    return False
+
+
 def enable_meshnet() -> tuple[bool, str]:
     code, out, err = _run(["nordvpn", "set", "meshnet", "on"])
     if code == 0 or "already enabled" in (out + err).lower():
+        # Best effort — Meshnet itself is up even if this fails.
+        enable_lan_discovery()
         return True, "Meshnet enabled."
     return False, out or err
 

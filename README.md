@@ -18,7 +18,7 @@ sudo ./setup.sh
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Open `http://<device-ip>:5000`. The UI guides you through installing NordVPN, logging in, and enabling Meshnet.
+Open `http://<device-ip>` (native) or `http://<device-ip>:5000` (Docker). The UI guides you through installing NordVPN, logging in, and enabling Meshnet.
 
 ## Requirements
 
@@ -57,7 +57,7 @@ ingress:
   nordmesh:
     title: Meshnet
     icon: mdi:vpn
-    url: http://<device-ip>:5000
+    url: http://<device-ip>        # :5000 for Docker
 ```
 
 ## Security
